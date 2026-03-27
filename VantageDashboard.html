@@ -1,0 +1,3505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vantage — NMAP Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a0f;
+    --bg2: #080f17;
+    --panel: #0a1520;
+    --panel2: #0d1d2e;
+    --border: #0e2640;
+    --accent: #00d4ff;
+    --accent2: #00ff9d;
+    --warn: #ff9900;
+    --danger: #ff3355;
+    --muted: #1a3a5c;
+    --text: #d4ecff;
+    --text2: #8bb8d9;
+    --text3: #4a7fa8;
+    --mono: 'Share Tech Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    --sans: 'Rajdhani', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; min-height: 100vh; overflow-x: hidden; }
+
+  /* ── UPLOAD ── */
+  #uploadScreen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; }
+  .upload-logo { font-family: var(--mono); font-size: 48px; color: var(--accent); text-shadow: 0 0 40px rgba(0,212,255,0.6); margin-bottom: 10px; letter-spacing: 6px; }
+  .upload-title { font-size: 28px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; text-shadow: 0 0 20px rgba(0,212,255,0.4); }
+  .upload-sub { font-family: var(--mono); font-size: 11px; color: var(--text3); letter-spacing: 2px; margin-bottom: 48px; }
+  .drop-zone { width: 100%; max-width: 580px; border: 2px dashed var(--muted); border-radius: 12px; padding: 60px 40px; text-align: center; cursor: pointer; transition: all 0.3s; background: var(--panel); position: relative; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(0,212,255,0.06); box-shadow: 0 0 40px rgba(0,212,255,0.15), inset 0 0 40px rgba(0,212,255,0.04); }
+  .drop-icon { font-size: 52px; margin-bottom: 16px; }
+  .drop-main { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .drop-sub { font-family: var(--mono); font-size: 11px; color: var(--text3); margin-bottom: 24px; }
+  .drop-btn { display: inline-block; padding: 10px 28px; background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.4); border-radius: 4px; color: var(--accent); font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all 0.2s; letter-spacing: 1px; }
+  .drop-btn:hover { background: rgba(0,212,255,0.2); }
+  #fileInput, #compareInput, #addScanInput { display: none; }
+  .features-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 40px; max-width: 580px; width: 100%; }
+  .feature-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 12px; text-align: center; }
+  .feature-icon { font-size: 24px; margin-bottom: 6px; }
+  .feature-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 1px; }
+
+  /* ── PROGRESS ── */
+  #progressScreen { display: none; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; padding: 40px; }
+  .progress-title { font-size: 22px; font-weight: 700; letter-spacing: 3px; color: var(--accent); margin-bottom: 30px; }
+  .progress-bar-wrap { width: 400px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 16px; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 3px; width: 0%; transition: width 0.3s; }
+  .progress-status { font-family: var(--mono); font-size: 12px; color: var(--text3); }
+  .progress-count { font-family: var(--mono); font-size: 28px; color: var(--accent2); margin-top: 20px; }
+
+  /* ── DASHBOARD ── */
+  #dashboardScreen { display: none; }
+  .header { background: linear-gradient(180deg, #060d16 0%, var(--bg) 100%); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; gap: 12px; flex-wrap: wrap; }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo { width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent) 0%, #0070a8 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 16px; font-weight: bold; color: #000; box-shadow: 0 0 20px rgba(0,212,255,0.4); flex-shrink: 0; }
+  .title-block h1 { font-size: 20px; font-weight: 700; letter-spacing: 3px; color: var(--accent); text-transform: uppercase; text-shadow: 0 0 20px rgba(0,212,255,0.5); }
+  .title-block .sub { font-family: var(--mono); font-size: 9px; color: var(--text3); letter-spacing: 2px; margin-top: 1px; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .scan-meta { font-family: var(--mono); font-size: 10px; color: var(--text3); text-align: right; line-height: 1.6; }
+  .scan-meta span { color: var(--accent2); }
+  .hdr-btn { padding: 6px 12px; border-radius: 4px; font-family: var(--mono); font-size: 10px; cursor: pointer; transition: all 0.2s; letter-spacing: 1px; border: 1px solid; }
+  .hdr-btn-danger { background: rgba(255,51,85,0.08); border-color: rgba(255,51,85,0.3); color: #ff3355; }
+  .hdr-btn-danger:hover { background: rgba(255,51,85,0.18); }
+  .hdr-btn-accent { background: rgba(0,212,255,0.08); border-color: rgba(0,212,255,0.3); color: var(--accent); }
+  .hdr-btn-accent:hover { background: rgba(0,212,255,0.18); }
+  .hdr-btn-warn { background: rgba(255,153,0,0.08); border-color: rgba(255,153,0,0.3); color: var(--warn); }
+  .hdr-btn-warn:hover { background: rgba(255,153,0,0.18); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: pulse 2s infinite; flex-shrink: 0; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  .stats-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--bg2); flex-wrap: wrap; }
+  .stat-item { flex: 1; min-width: 100px; padding: 8px 16px; border-right: 1px solid var(--border); transition: background 0.2s; cursor: default; }
+  .stat-item:last-child { border-right: none; }
+  .stat-item:hover { background: var(--panel); }
+  .stat-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--text3); text-transform: uppercase; margin-bottom: 3px; }
+  .stat-value { font-size: 26px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+  .main { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 120px); }
+  .sidebar { border-right: 1px solid var(--border); background: var(--bg2); overflow-y: auto; display: flex; flex-direction: column; }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  .sidebar-section { border-bottom: 1px solid var(--border); padding: 10px 0; }
+  .sidebar-title { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--text3); text-transform: uppercase; padding: 4px 14px 7px; display: flex; align-items: center; gap: 8px; }
+  .sidebar-title::after { content:''; flex:1; height:1px; background: var(--border); }
+  .sidebar-search { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .sidebar-search-input { width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 5px 8px; font-family: var(--mono); font-size: 10px; color: var(--text); outline: none; transition: border-color 0.2s; }
+  .sidebar-search-input::placeholder { color: var(--text3); }
+  .sidebar-search-input:focus { border-color: var(--accent); }
+  .filter-btn { display: flex; align-items: center; gap: 9px; padding: 6px 12px; cursor: pointer; transition: background 150ms ease; border: 1px solid transparent; background: none; width: 100%; text-align: left; color: var(--text2); font-family: var(--sans); font-size: 12px; font-weight: 500; min-height: 32px; }
+  .filter-btn:hover { background: var(--panel); color: var(--text); }
+  .filter-btn.active { background: rgba(0,212,255,0.15); border-color: var(--accent); color: var(--accent); }
+  .filter-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .filter-count { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text3); background: var(--border); border-radius: 10px; padding: 1px 7px; }
+  .filter-btn.active .filter-count { color: var(--accent); background: rgba(0,212,255,0.12); }
+
+  .content { overflow-y: auto; background: var(--bg); }
+  .content::-webkit-scrollbar { width: 6px; }
+  .content::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+  /* ── TABS ── */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg2); position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
+  .tab { padding: 11px 20px; cursor: pointer; font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text3); border-bottom: 2px solid transparent; transition: all 0.2s; border-right: 1px solid var(--border); white-space: nowrap; }
+  .tab:hover { color: var(--text); background: var(--panel); }
+  .tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); background: transparent; }
+
+  /* ── SORT + SEARCH BAR ── */
+  .search-bar { padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .search-input { flex:1; min-width: 160px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; transition: border-color 0.2s; }
+  .search-input::placeholder { color: var(--text3); }
+  .search-input:focus { border-color: var(--accent); }
+  .search-btn { padding: 6px 12px; background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.3); border-radius: 4px; color: var(--accent); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .search-btn:hover { background: rgba(0,212,255,0.2); }
+  .sort-select { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-family: var(--mono); font-size: 11px; color: var(--text2); outline: none; cursor: pointer; }
+  .sort-select:focus { border-color: var(--accent); }
+  .sort-select option { background: var(--panel2); }
+
+  /* ── HOST CARDS ── */
+  .host-grid { padding: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+  .host-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; transition: background 150ms ease, box-shadow 150ms ease; animation: fadeIn 0.35s ease forwards; position: relative; padding: 16px; }
+  .host-card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(0,212,255,0.1); transform: translateY(-2px); }
+  .host-card.filtered { display: none; }
+  .host-card.risk-glow-critical { border-color: rgba(255,51,85,0.5); box-shadow: inset 0 0 0 1px rgba(255,51,85,0.4); }
+  .host-card.risk-glow-high { border-color: rgba(255,153,0,0.4); box-shadow: inset 0 0 0 1px rgba(255,153,0,0.3); }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)} }
+
+  .host-header { padding: 9px 12px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--border); background: var(--panel2); }
+  .host-icon { width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .host-ip { font-family: var(--mono); font-size: 13px; font-weight: bold; color: var(--text); }
+  .host-hostname { font-family: var(--mono); font-size: 9px; color: var(--text3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+  .host-status { margin-left: auto; font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 3px; letter-spacing: 1px; flex-shrink: 0; }
+  .status-open { background: rgba(0,255,157,0.12); color: var(--accent2); border: 1px solid rgba(0,255,157,0.3); }
+  .status-filtered { background: rgba(26,58,92,0.5); color: var(--text3); border: 1px solid var(--muted); }
+  .card-risk-badge { font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px; flex-shrink: 0; }
+  .card-risk-critical { background: rgba(255,51,85,0.15); color: var(--danger); border: 1px solid rgba(255,51,85,0.4); }
+  .card-risk-high { background: rgba(255,153,0,0.15); color: var(--warn); border: 1px solid rgba(255,153,0,0.4); }
+  .card-risk-medium { background: rgba(255,200,0,0.1); color: #ffc800; border: 1px solid rgba(255,200,0,0.3); }
+  .annotate-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 3px; transition: background 0.15s; opacity: 0.5; }
+  .annotate-btn:hover { background: rgba(0,212,255,0.12); opacity: 1; }
+
+  .host-body { padding: 10px 12px; }
+  .service-tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .service-tag { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; border: 1px solid; display: flex; align-items: center; gap: 4px; }
+  .port-list { display: flex; flex-direction: column; gap: 4px; }
+  .port-row { display: flex; align-items: center; gap: 7px; padding: 4px 7px; background: var(--bg2); border-radius: 3px; border-left: 3px solid; font-size: 12px; }
+  .port-num { font-family: var(--mono); font-size: 12px; color: var(--accent); min-width: 60px; font-weight: bold; }
+  .port-svc { color: var(--text2); flex: 1; font-size: 12px; font-weight: 500; }
+  .port-ver { font-family: var(--mono); font-size: 10px; color: var(--text3); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ssl-info { margin-top: 7px; padding: 5px 7px; border: 1px solid rgba(0,212,255,0.1); border-radius: 4px; font-family: var(--mono); font-size: 10px; color: var(--text3); line-height: 1.6; background: rgba(0,212,255,0.04); }
+  .ssl-info .cn { color: var(--accent); font-weight: bold; }
+  .ssl-warn { background: rgba(255,153,0,0.06); border-color: rgba(255,153,0,0.3); }
+  .ssl-warn .cn { color: var(--warn); }
+  .host-footer { padding: 6px 12px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 10px; color: var(--text3); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .latency-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; min-width: 40px; }
+  .latency-fill { height: 100%; border-radius: 2px; background: var(--accent2); }
+  .scripts-info { margin-top: 7px; font-family: var(--mono); font-size: 10px; color: var(--text3); line-height: 1.6; border-top: 1px solid var(--border); padding-top: 7px; }
+  .scripts-info .script-key { color: var(--text2); }
+  .host-scripts.collapsed .scripts-body { display: none; }
+  .host-scripts .scripts-body { display: block; }
+  .scripts-toggle { cursor: pointer; color: var(--text3); font-size: 10px; padding: 4px 0; }
+  .scripts-toggle:hover { color: var(--accent); }
+  .annotation-strip { padding: 5px 12px; background: rgba(0,212,255,0.04); border-top: 1px solid rgba(0,212,255,0.1); font-family: var(--mono); font-size: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ann-label-tag { padding: 2px 8px; border-radius: 3px; font-size: 10px; }
+
+  /* ── NETWORK MAP ── */
+  .map-wrap { padding: 18px; height: calc(100% - 44px); display: flex; flex-direction: column; gap: 14px; }
+  #netmap { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; position: relative; overflow: hidden; min-height: 460px; cursor: grab; }
+  #netmap:active { cursor: grabbing; }
+  #mapCanvas { display: block; }
+  .map-controls { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }
+  .map-ctrl-btn { width: 28px; height: 28px; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; color: var(--text2); font-family: var(--mono); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .map-ctrl-btn:hover { background: var(--panel); color: var(--accent); border-color: var(--accent); }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--text2); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .map-inspector { position: absolute; top: 10px; right: 10px; width: 240px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; z-index: 10; display: none; }
+  .map-inspector-header { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); color: var(--accent); font-size: 14px; margin-bottom: 4px; }
+
+  /* ── SUBNET VIEW ── */
+  .subnet-container { padding: 18px; }
+  .subnet-block { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+  .subnet-header { padding: 9px 14px; background: var(--panel2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .subnet-name { font-family: var(--mono); font-size: 14px; color: var(--accent); font-weight: bold; }
+  .subnet-count { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+  .subnet-bar { display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 14px; }
+  .subnet-host-chip { font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 4px; border: 1px solid; cursor: pointer; transition: all 0.15s; }
+  .subnet-host-chip:hover { transform: scale(1.05); }
+
+  /* ── RISK ── */
+  .risk-container { padding: 18px; }
+  .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .risk-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
+  .risk-card h3 { font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .risk-badge { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; }
+  .risk-critical { background: rgba(255,51,85,0.15); color: var(--danger); border: 1px solid rgba(255,51,85,0.3); }
+  .risk-high { background: rgba(255,153,0,0.15); color: var(--warn); border: 1px solid rgba(255,153,0,0.3); }
+  .risk-medium { background: rgba(255,200,0,0.1); color: #ffc800; border: 1px solid rgba(255,200,0,0.3); }
+  .risk-info { background: rgba(0,212,255,0.12); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+  .finding-item { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; }
+  .finding-item:last-child { border-bottom: none; }
+  .finding-item:hover { background: rgba(0,212,255,0.03); }
+  .finding-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .finding-text { color: var(--text2); line-height: 1.5; }
+  .finding-text strong { color: var(--text); }
+  .chart-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .chart-bar-label { font-family: var(--mono); font-size: 10px; color: var(--text2); width: 100px; text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chart-bar-track { flex: 1; height: 16px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .chart-bar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 6px; font-family: var(--mono); font-size: 10px; color: rgba(0,0,0,0.7); font-weight: bold; transition: width 1s cubic-bezier(0.4,0,0.2,1); min-width: 20px; }
+
+  /* ── COMPARE / DIFF TAB ── */
+  .diff-container { padding: 18px; }
+  .diff-upload-zone { border: 2px dashed var(--muted); border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 18px; }
+  .diff-upload-zone:hover { border-color: var(--warn); background: rgba(255,153,0,0.04); }
+  .diff-section { margin-bottom: 16px; }
+  .diff-header { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; color: var(--text3); text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .diff-header::after { content:''; flex:1; height:1px; background: var(--border); }
+  .diff-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-radius: 4px; margin-bottom: 5px; border-left: 3px solid; font-size: 12px; }
+  .diff-new { border-color: var(--accent2); background: rgba(0,255,157,0.04); }
+  .diff-gone { border-color: var(--danger); background: rgba(255,51,85,0.04); }
+  .diff-changed { border-color: var(--warn); background: rgba(255,153,0,0.04); }
+  .diff-ip { font-family: var(--mono); font-size: 12px; font-weight: bold; min-width: 130px; }
+  .diff-badge { font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 3px; }
+  .diff-state { color: var(--warn); font-family: var(--mono); font-size: 11px; margin-right: 8px; }
+
+  /* ── ANNOTATIONS ── */
+  .ann-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .ann-modal { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: 100%; max-width: 440px; }
+  .ann-modal h3 { font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--accent); margin-bottom: 16px; }
+  .ann-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .ann-textarea { width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; resize: vertical; min-height: 80px; transition: border-color 0.2s; }
+  .ann-textarea:focus { border-color: var(--accent); }
+  .ann-label-select { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .ann-label-opt { padding: 4px 12px; border-radius: 3px; border: 1px solid var(--border); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; color: var(--text2); background: var(--panel); }
+  .ann-label-opt:hover { border-color: var(--accent); color: var(--accent); }
+  .ann-label-opt.selected { color: #000; }
+  .ann-modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* ── EXPORT DROPDOWN ── */
+  .export-wrap { position: relative; }
+  .export-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; min-width: 180px; z-index: 300; box-shadow: 0 8px 32px rgba(0,0,0,0.4); overflow: hidden; }
+  .export-opt { padding: 9px 14px; font-family: var(--mono); font-size: 11px; color: var(--text2); cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 8px; }
+  .export-opt:hover { background: var(--panel); color: var(--text); }
+  .export-opt-sep { height: 1px; background: var(--border); }
+
+  /* ── TOOLTIP ── */
+  .tooltip { position: fixed; background: var(--panel2); border: 1px solid var(--accent); border-radius: 6px; padding: 9px 12px; font-family: var(--mono); font-size: 11px; color: var(--text); pointer-events: none; z-index: 1000; display: none; box-shadow: 0 4px 20px rgba(0,0,0,0.5); max-width: 260px; }
+  .tooltip-ip { color: var(--accent); font-size: 12px; font-weight: bold; margin-bottom: 5px; }
+  .tooltip-row { color: var(--text2); margin: 2px 0; }
+  .tooltip-row span { color: var(--text); }
+
+  .search-hl { background: rgba(0,212,255,0.25); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+
+  .tab-content { display: none; height: 100%; }
+  .tab-content.active { display: block; }
+
+  /* ── PORT-CENTRIC VIEW ── */
+  .ports-layout { display: grid; grid-template-columns: 280px 1fr; gap: 1px; height: calc(100vh - 200px); background: var(--border); }
+  .ports-sidebar { background: var(--bg); overflow-y: auto; padding: 8px; }
+  .ports-detail { background: var(--bg); overflow-y: auto; padding: 16px; }
+  .port-entry { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; cursor: pointer; border-radius: 4px; border-left: 3px solid transparent; transition: background 150ms ease; font-family: var(--mono); font-size: 13px; }
+  .port-entry:hover { background: var(--panel); }
+  .port-entry.active { background: var(--panel); border-left-color: var(--accent); }
+  .port-entry-num { color: var(--accent); }
+  .port-entry-svc { color: var(--text2); font-size: 11px; }
+  .port-entry-count { background: var(--muted); color: var(--text); padding: 2px 8px; border-radius: 10px; font-size: 10px; }
+  .port-detail-header { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .port-detail-header h2 { margin: 0; font-size: 18px; color: var(--accent); }
+  .port-detail-stats { display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px; color: var(--text2); }
+  .port-host-row { display: grid; grid-template-columns: 140px 1fr 120px 80px; gap: 8px; padding: 8px; border-radius: 4px; font-size: 12px; cursor: pointer; transition: background 150ms ease; }
+  .port-host-row:hover { background: var(--panel); }
+  .port-host-ip { color: var(--accent); font-family: var(--mono); }
+  .port-host-ver { color: var(--text2); }
+  .ports-search { width: 100%; padding: 8px; margin-bottom: 8px; background: var(--panel); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 12px; border-radius: 4px; }
+  .ports-filter-bar { display: flex; gap: 4px; margin-bottom: 8px; }
+  .ports-filter-btn { padding: 4px 8px; font-size: 10px; background: var(--panel); border: 1px solid var(--border); color: var(--text2); cursor: pointer; border-radius: 3px; }
+  .ports-filter-btn.active { background: rgba(0,212,255,0.15); border-color: var(--accent); color: var(--accent); }
+  .ports-placeholder { color: var(--text3); font-size: 14px; text-align: center; padding: 40px; }
+
+  /* ── PORT HEATMAP ── */
+  .heatmap-wrapper { overflow: auto; max-height: calc(100vh - 200px); }
+  .heatmap-table { border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .heatmap-table th { position: sticky; top: 0; background: var(--bg); padding: 4px 6px; color: var(--text2); writing-mode: vertical-lr; text-orientation: mixed; cursor: pointer; min-width: 28px; z-index: 1; }
+  .heatmap-table th:hover { color: var(--accent); }
+  .heatmap-table td { padding: 0; text-align: center; }
+  .heatmap-cell { width: 24px; height: 24px; border: 1px solid var(--border); cursor: pointer; transition: opacity 150ms; }
+  .heatmap-cell:hover { opacity: 0.7; outline: 1px solid var(--accent); }
+  .heatmap-cell.open { background: #00ff9d44; }
+  .heatmap-cell.filtered { background: #ff335544; }
+  .heatmap-cell.closed { background: transparent; }
+  .heatmap-ip { position: sticky; left: 0; background: var(--bg); padding: 2px 8px; color: var(--accent); text-align: right; font-size: 11px; white-space: nowrap; z-index: 1; }
+  .heatmap-legend { display: flex; gap: 16px; padding: 8px 0; font-size: 11px; color: var(--text2); }
+  .heatmap-legend-item { display: flex; align-items: center; gap: 4px; }
+  .heatmap-legend-swatch { width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 2px; }
+  .heatmap-legend-swatch.open { background: #00ff9d44; }
+  .heatmap-legend-swatch.filtered { background: #ff335544; }
+  .heatmap-legend-swatch.closed { background: transparent; border-style: dashed; }
+
+  /* ── SESSION RESUME ── */
+  .session-resume { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel2); border: 1px solid var(--accent); border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: var(--text); }
+
+  /* ── TIMELINE VIEW ── */
+  .timeline-bar { display: flex; align-items: center; gap: 0; padding: 20px; position: relative; }
+  .timeline-point { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1; position: relative; }
+  .timeline-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--muted); border: 2px solid var(--border); transition: all 150ms; z-index: 1; }
+  .timeline-dot.active { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .timeline-label { font-size: 11px; color: var(--text2); margin-top: 8px; text-align: center; }
+  .timeline-date { font-size: 10px; color: var(--text3); }
+  .timeline-line { position: absolute; top: 28px; left: 0; right: 0; height: 2px; background: var(--border); z-index: 0; }
+  .timeline-summary { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .timeline-stat-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .timeline-stat-card h3 { margin: 0 0 8px; font-size: 13px; color: var(--text2); }
+  .timeline-delta { font-family: var(--mono); font-size: 12px; }
+  .timeline-delta.positive { color: var(--danger); }
+  .timeline-delta.negative { color: var(--accent2); }
+
+  /* ── KEYBOARD SHORTCUTS ── */
+  .host-card.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .shortcut-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .shortcut-modal { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 100%; max-width: 520px; }
+  .shortcut-modal h3 { font-size: 18px; color: var(--accent); margin-bottom: 16px; letter-spacing: 2px; }
+  .shortcut-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .shortcut-grid div { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 12px; color: var(--text2); }
+  kbd { display: inline-block; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-family: var(--mono); font-size: 11px; color: var(--accent); min-width: 24px; text-align: center; }
+
+  /* ── STAT TOOLTIPS ── */
+  .stat-item { position: relative; cursor: default; }
+  .stat-tooltip { display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 200px; z-index: 100; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+  .stat-item:hover .stat-tooltip { display: block; }
+  .stat-tip-row { display: flex; justify-content: space-between; padding: 3px 0; font-family: var(--mono); font-size: 11px; color: var(--text); }
+  .stat-tip-row span { color: var(--accent); }
+
+  /* ── ANNOTATION HISTORY ── */
+  .ann-history { max-height: 150px; overflow-y: auto; margin-top: 8px; }
+  .ann-history-label { font-size: 10px; color: var(--text3); text-transform: uppercase; margin-bottom: 4px; }
+  .ann-history-entry { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+
+  /* ── PRINT/PDF MODE ── */
+  @media print {
+    body { background: #fff !important; color: #000 !important; }
+    .sidebar, .header, .tabs, .search-bar, .map-controls, #mapInspector, .annotate-btn, .shortcut-overlay, .export-dropdown, .session-resume { display: none !important; }
+    .host-card { break-inside: avoid; border: 1px solid #ccc !important; background: #fff !important; color: #000 !important; box-shadow: none !important; }
+    .host-card * { color: #000 !important; }
+    .risk-badge { border: 1px solid currentColor; }
+    .service-tag { border: 1px solid #ccc; background: #f5f5f5 !important; color: #333 !important; }
+    .host-scripts.collapsed .scripts-body { display: block !important; }
+    #hostGrid { display: block !important; }
+    .host-card { margin-bottom: 8px; }
+    @page { margin: 1cm; }
+  }
+
+  @media (max-width: 860px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { max-height: 200px; }
+    .risk-grid { grid-template-columns: 1fr; }
+    .features-grid { grid-template-columns: 1fr 1fr; }
+    .tabs .tab { padding: 9px 12px; font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ UPLOAD SCREEN ══════════ -->
+<div id="uploadScreen">
+  <div class="upload-logo">⬡</div>
+  <div class="upload-title">Vantage</div>
+  <div class="upload-sub">NMAP XML → INTERACTIVE DASHBOARD</div>
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xml" multiple>
+    <div class="drop-icon">📡</div>
+    <div class="drop-main">Drop Nmap XML files here or click to browse</div>
+    <div class="drop-sub">Multiple files supported — hosts are merged by IP<br>Generated with: nmap -oX output.xml</div>
+    <label for="fileInput" class="drop-btn">📂 BROWSE FILES</label>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card"><div class="feature-icon">🗃️</div><div class="feature-label">Host Cards</div></div>
+    <div class="feature-card"><div class="feature-icon">🕸️</div><div class="feature-label">Network Map</div></div>
+    <div class="feature-card"><div class="feature-icon">📝</div><div class="feature-label">Annotations</div></div>
+    <div class="feature-card"><div class="feature-icon">🔀</div><div class="feature-label">Scan Diff</div></div>
+    <div class="feature-card"><div class="feature-icon">🚨</div><div class="feature-label">Risk Intel</div></div>
+    <div class="feature-card"><div class="feature-icon">📄</div><div class="feature-label">4 Exports</div></div>
+    <div class="feature-card"><div class="feature-icon">🔍</div><div class="feature-label">Quick Filter</div></div>
+    <div class="feature-card"><div class="feature-icon">⌨️</div><div class="feature-label">Shortcuts</div></div>
+  </div>
+</div>
+
+<!-- ══════════ PROGRESS SCREEN ══════════ -->
+<div id="progressScreen" style="display:none;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;padding:40px">
+  <div class="progress-title">PARSING SCAN DATA</div>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
+  <div class="progress-status" id="progressStatus">Initializing parser...</div>
+  <div class="progress-count" id="progressCount">0 hosts</div>
+</div>
+
+<!-- ══════════ DASHBOARD ══════════ -->
+<div id="dashboardScreen" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">V</div>
+      <div class="title-block">
+        <h1 id="dashTitle">Vantage</h1>
+        <div class="sub" id="dashSub">LOADING...</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="scan-meta" id="scanMeta"></div>
+      <button class="hdr-btn hdr-btn-warn" onclick="document.getElementById('addScanInput').click()">+ Add Scan</button>
+      <input type="file" id="addScanInput" accept=".xml" multiple style="display:none">
+      <input type="file" id="compareInput" accept=".xml" style="display:none">
+      <div class="export-wrap">
+        <button class="hdr-btn hdr-btn-accent" onclick="toggleExport(event)">📄 EXPORT ▾</button>
+        <div class="export-dropdown" id="exportDropdown" style="display:none">
+          <div class="export-opt" onclick="exportJSON()">📦 JSON Data Dump</div>
+          <div class="export-opt" onclick="exportCSV()">📊 CSV (per port)</div>
+          <div class="export-opt" onclick="exportHTML()">🌐 Standalone HTML Report</div>
+          <div class="export-opt" onclick="exportMarkdown()">📝 Markdown Pentest Summary</div>
+          <div class="export-opt-sep"></div>
+          <div class="export-opt" onclick="window.print()">🖨️ Print / PDF</div>
+        </div>
+      </div>
+      <button class="hdr-btn hdr-btn-danger" onclick="resetToUpload()">↩ NEW SCAN</button>
+      <button class="hdr-btn hdr-btn-danger" onclick="if(confirm('Clear saved session?')){clearLocalStorage();}" title="Clear session" style="padding:6px 8px">🗑️</button>
+      <div class="status-dot"></div>
+    </div>
+  </div>
+
+  <div class="stats-bar" id="statsBar"></div>
+
+  <div class="main">
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-search">
+        <input class="sidebar-search-input" type="text" id="sidebarSearch" placeholder="Filter sidebar…" oninput="filterSidebar()" />
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Status</div>
+        <button class="filter-btn active" id="fb-all" data-filter="all" onclick="filterHosts('all',this)">
+          <div class="filter-dot" style="background:#6fa3c8"></div>All Hosts
+          <span class="filter-count" id="cnt-all">0</span>
+        </button>
+        <button class="filter-btn" id="fb-open" data-filter="open" onclick="filterHosts('open',this)">
+          <div class="filter-dot" style="background:var(--accent2)"></div>Open Ports
+          <span class="filter-count" id="cnt-open">0</span>
+        </button>
+        <button class="filter-btn" id="fb-filtered" data-filter="filtered" onclick="filterHosts('filtered',this)">
+          <div class="filter-dot" style="background:var(--muted)"></div>All Filtered
+          <span class="filter-count" id="cnt-filtered">0</span>
+        </button>
+        <button class="filter-btn" id="fb-annotated" data-filter="annotated" onclick="filterHosts('annotated',this)">
+          <div class="filter-dot" style="background:#a78bfa"></div>Annotated 📝
+          <span class="filter-count" id="cnt-annotated">0</span>
+        </button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">By Risk</div>
+        <button class="filter-btn" data-filter="__risk__critical" onclick="filterHosts('__risk__critical',this)">
+          <div class="filter-dot" style="background:var(--danger)"></div>🚨 Critical
+          <span class="filter-count" id="cnt-risk-critical">0</span>
+        </button>
+        <button class="filter-btn" data-filter="__risk__high" onclick="filterHosts('__risk__high',this)">
+          <div class="filter-dot" style="background:var(--warn)"></div>⚠️ High
+          <span class="filter-count" id="cnt-risk-high">0</span>
+        </button>
+        <button class="filter-btn" data-filter="__risk__medium" onclick="filterHosts('__risk__medium',this)">
+          <div class="filter-dot" style="background:#ffc800"></div>🔔 Medium
+          <span class="filter-count" id="cnt-risk-medium">0</span>
+        </button>
+      </div>
+      <div class="sidebar-section" id="serviceFilters">
+        <div class="sidebar-title">By Service</div>
+      </div>
+      <div class="sidebar-section" id="subnetFiltersSec">
+        <div class="sidebar-title">By Subnet</div>
+        <div id="subnetFilters"></div>
+      </div>
+      <div class="sidebar-section" id="scanFiltersSec" style="display:none">
+        <div class="sidebar-title">By Scan</div>
+        <div id="scanFilters"></div>
+      </div>
+      <div id="groupSection" class="sidebar-section" style="display:none">
+        <div class="sidebar-title">Groups <button class="group-add-btn" onclick="createGroupPrompt()" style="float:right;background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;padding:0 4px">+</button></div>
+        <div id="groupFilters"></div>
+      </div>
+    </div>
+
+    <div class="content" id="mainContent">
+      <div class="tabs" id="tabBar">
+        <div class="tab active" data-tab="hosts" onclick="switchTab('hosts',this)">HOST CARDS</div>
+        <div class="tab" data-tab="network" onclick="switchTab('network',this)">NETWORK MAP</div>
+        <div class="tab" data-tab="ports" onclick="switchTab('ports',this)">PORTS</div>
+        <div class="tab" data-tab="subnets" onclick="switchTab('subnets',this)">SUBNET VIEW</div>
+        <div class="tab" data-tab="heatmap" onclick="switchTab('heatmap',this)">HEATMAP</div>
+        <div class="tab" data-tab="risk" onclick="switchTab('risk',this)">RISK INTEL</div>
+        <div class="tab" data-tab="diff" onclick="switchTab('diff',this)">🔀 DIFF</div>
+        <div class="tab" id="timelineTab" data-tab="timeline" style="display:none" onclick="switchTab('timeline',this)">📈 TIMELINE</div>
+      </div>
+
+      <div class="search-bar" id="searchBar">
+        <input class="search-input" type="text" id="searchInput" placeholder="Search IP, hostname, port, service, CN, annotation…" oninput="searchHosts()">
+        <select class="sort-select" id="sortSelect" onchange="applyFilters()">
+          <option value="ip">Sort: IP</option>
+          <option value="risk">Sort: Risk</option>
+          <option value="ports">Sort: Port Count</option>
+          <option value="latency">Sort: Latency</option>
+          <option value="subnet">Sort: Subnet</option>
+        </select>
+        <button class="search-btn" onclick="clearSearch()">CLEAR</button>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text3)" id="searchStatus"></span>
+      </div>
+
+      <div class="tab-content active" id="tab-hosts">
+        <div class="host-grid" id="hostGrid"></div>
+      </div>
+      <div class="tab-content" id="tab-network">
+        <div class="map-wrap">
+          <div id="netmap">
+            <canvas id="mapCanvas"></canvas>
+            <div class="map-controls">
+              <button class="map-ctrl-btn" id="mapZoomIn" title="Zoom In">+</button>
+              <button class="map-ctrl-btn" id="mapZoomOut" title="Zoom Out">−</button>
+              <button class="map-ctrl-btn" id="mapReset" title="Reset">⊙</button>
+              <button class="map-ctrl-btn" id="mapFit" title="Fit All">⊞</button>
+            </div>
+          </div>
+          <div class="map-legend" id="mapLegend"></div>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-ports">
+        <div class="ports-layout">
+          <div class="ports-sidebar" id="portsList"></div>
+          <div class="ports-detail" id="portDetail">
+            <div class="ports-placeholder">Select a port to see all hosts</div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-subnets">
+        <div class="subnet-container" id="subnetContainer"></div>
+      </div>
+      <div class="tab-content" id="tab-heatmap">
+        <div id="heatmapContainer"></div>
+      </div>
+      <div class="tab-content" id="tab-risk">
+        <div class="risk-container" id="riskContainer"></div>
+      </div>
+      <div class="tab-content" id="tab-diff">
+        <div class="diff-container" id="diffContainer">
+          <div class="diff-upload-zone" onclick="document.getElementById('compareInput').click()">
+            <div style="font-size:36px;margin-bottom:10px">🔀</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:8px">Load Comparison Scan</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--text3)">Upload a second Nmap XML to compare against current scan</div>
+          </div>
+          <div id="diffResults" style="display:none"></div>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-timeline">
+        <div id="timelineContainer" style="padding:18px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ANNOTATION MODAL -->
+<div id="annModal" style="display:none" class="ann-modal-overlay" onclick="closeAnnModal(event)">
+  <div class="ann-modal" onclick="event.stopPropagation()">
+    <h3>📝 ANNOTATE HOST — <span id="annModalIP" style="color:var(--text)"></span></h3>
+    <label class="ann-label">Label</label>
+    <div class="ann-label-select" id="annLabelSelect">
+      <div class="ann-label-opt" data-label="confirmed" style="--lc:#00ff9d" onclick="selectAnnLabel(this)">✅ Confirmed</div>
+      <div class="ann-label-opt" data-label="investigate" style="--lc:#ff9900" onclick="selectAnnLabel(this)">🔍 Investigate</div>
+      <div class="ann-label-opt" data-label="oos" style="--lc:#6fa3c8" onclick="selectAnnLabel(this)">⛔ Out of Scope</div>
+      <div class="ann-label-opt" data-label="patched" style="--lc:#a78bfa" onclick="selectAnnLabel(this)">🩹 Patched</div>
+      <div class="ann-label-opt" data-label="compromised" style="--lc:#ff3355" onclick="selectAnnLabel(this)">💀 Compromised</div>
+    </div>
+    <label class="ann-label" style="margin-top:12px">Group</label>
+    <select id="annGroupSelect" style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;margin-bottom:12px">
+      <option value="">— No Group —</option>
+    </select>
+    <label class="ann-label">Notes</label>
+    <textarea class="ann-textarea" id="annNotes" placeholder="Add your analysis notes…"></textarea>
+    <div id="annHistory" class="ann-history"></div>
+    <div class="ann-modal-btns">
+      <button class="hdr-btn hdr-btn-danger" onclick="clearAnnotation()">Clear</button>
+      <button class="hdr-btn hdr-btn-accent" onclick="saveAnnotation()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="shortcutOverlay" class="shortcut-overlay" style="display:none" onclick="this.style.display='none'">
+  <div class="shortcut-modal" onclick="event.stopPropagation()">
+    <h3>KEYBOARD SHORTCUTS</h3>
+    <div class="shortcut-grid">
+      <div><kbd>j</kbd> / <kbd>k</kbd> Navigate cards</div>
+      <div><kbd>/</kbd> Focus search</div>
+      <div><kbd>g</kbd><kbd>h</kbd> Host Cards tab</div>
+      <div><kbd>g</kbd><kbd>m</kbd> Network Map tab</div>
+      <div><kbd>g</kbd><kbd>p</kbd> Ports tab</div>
+      <div><kbd>g</kbd><kbd>s</kbd> Subnet View tab</div>
+      <div><kbd>g</kbd><kbd>r</kbd> Risk Intel tab</div>
+      <div><kbd>g</kbd><kbd>t</kbd> Timeline tab</div>
+      <div><kbd>a</kbd> Annotate selected host</div>
+      <div><kbd>1</kbd>-<kbd>5</kbd> Quick label selected</div>
+      <div><kbd>?</kbd> Toggle this overlay</div>
+      <div><kbd>Esc</kbd> Close modals</div>
+    </div>
+    <div style="text-align:right;margin-top:16px">
+      <button class="hdr-btn hdr-btn-accent" onclick="document.getElementById('shortcutOverlay').style.display='none'">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// SECTION 3: FILE HANDLING & UPLOAD
+// ═══════════════════════════════════════════════════════════
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const compareInput = document.getElementById('compareInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+compareInput.addEventListener('change', e => { if (e.target.files[0]) handleCompareFile(e.target.files[0]); });
+
+document.getElementById('addScanInput').addEventListener('change', async function() {
+  const files = Array.from(this.files).filter(isValidXml);
+  if (!files.length) return;
+  for (const file of files) {
+    const text = await file.text();
+    await parseNmapXML(text, file.name, { skipDashboard: true });
+  }
+  buildDashboard();
+  this.value = '';
+});
+
+function isValidXml(file) {
+  return file.name.toLowerCase().endsWith('.xml') || file.type === 'text/xml' || file.type === 'application/xml';
+}
+
+async function handleFiles(files) {
+  const xmlFiles = Array.from(files).filter(isValidXml);
+  if (!xmlFiles.length) { alert('Please upload valid .xml files'); return; }
+  document.getElementById('uploadScreen').style.display = 'none';
+  document.getElementById('progressScreen').style.display = 'flex';
+  for (let i = 0; i < xmlFiles.length; i++) {
+    showProgress('Parsing file ' + (i + 1) + ' of ' + xmlFiles.length + ': ' + xmlFiles[i].name, 0, '');
+    const text = await xmlFiles[i].text();
+    if (xmlFiles.length > 1) {
+      await parseNmapXML(text, xmlFiles[i].name, { skipDashboard: true });
+    } else {
+      await parseNmapXML(text, xmlFiles[i].name);
+      return; // single file — parseNmapXML handles dashboard display
+    }
+  }
+  // Multiple files: build dashboard once after all parsed
+  buildDashboard();
+  document.getElementById('progressScreen').style.display = 'none';
+  document.getElementById('dashboardScreen').style.display = 'block';
+}
+
+function handleCompareFile(file) {
+  if (!isValidXml(file)) { alert('Please select a valid Nmap XML file (.xml)'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    switchTab('diff', document.querySelector('[data-tab="diff"]'));
+    runDiff(e.target.result, file.name);
+  };
+  reader.readAsText(file);
+}
+
+function showProgress(msg, pct, count) {
+  document.getElementById('uploadScreen').style.display = 'none';
+  document.getElementById('progressScreen').style.display = 'flex';
+  document.getElementById('progressStatus').textContent = msg;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressCount').textContent = count !== undefined ? count + ' hosts processed' : '';
+}
+
+function resetToUpload() {
+  resetState();
+  document.getElementById('uploadScreen').style.display = '';
+  document.getElementById('progressScreen').style.display = 'none';
+  document.getElementById('dashboardScreen').style.display = 'none';
+  document.getElementById('hostGrid').innerHTML = '';
+  document.getElementById('subnetContainer').innerHTML = '';
+  document.getElementById('riskContainer').innerHTML = '';
+  // Restore original diff container HTML
+  const diffContainer = document.getElementById('diffContainer');
+  if (diffContainer) {
+    diffContainer.innerHTML =
+      '<div class="diff-upload-zone" onclick="document.getElementById(\'compareInput\').click()">' +
+        '<div style="font-size:36px;margin-bottom:10px">🔀</div>' +
+        '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Load Comparison Scan</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--text3)">Upload a second Nmap XML to compare against current scan</div>' +
+      '</div>' +
+      '<div id="diffResults" style="display:none"></div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 4: NMAP XML PARSER
+// ═══════════════════════════════════════════════════════════
+
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+const PORT_SERVICE_MAP = {
+  21:    { label:'FTP',           icon:'📂', color:'#f39c12', tag:'ftp'       },
+  22:    { label:'SSH',           icon:'💻', color:'#2ecc71', tag:'ssh'       },
+  23:    { label:'Telnet',        icon:'📟', color:'#e74c3c', tag:'telnet'    },
+  25:    { label:'SMTP',          icon:'✉️',  color:'#3498db', tag:'smtp'      },
+  53:    { label:'DNS',           icon:'🌐', color:'#9b59b6', tag:'dns'       },
+  80:    { label:'HTTP',          icon:'🌍', color:'#f39c12', tag:'http'      },
+  110:   { label:'POP3',          icon:'📧', color:'#3498db', tag:'pop3'      },
+  111:   { label:'RPC',           icon:'🔌', color:'#7f8c8d', tag:'rpc'       },
+  135:   { label:'MSRPC',         icon:'🪟', color:'#0078d4', tag:'windows'   },
+  139:   { label:'NetBIOS',       icon:'🪟', color:'#0078d4', tag:'windows'   },
+  143:   { label:'IMAP',          icon:'📨', color:'#3498db', tag:'imap'      },
+  389:   { label:'LDAP',          icon:'📒', color:'#8e44ad', tag:'ldap'      },
+  443:   { label:'HTTPS',         icon:'🔐', color:'#00d4ff', tag:'https'     },
+  445:   { label:'SMB',           icon:'🪟', color:'#0078d4', tag:'windows'   },
+  465:   { label:'SMTPS',         icon:'✉️',  color:'#3498db', tag:'smtp'      },
+  514:   { label:'Syslog',        icon:'📋', color:'#7f8c8d', tag:'syslog'    },
+  587:   { label:'SMTP',          icon:'✉️',  color:'#3498db', tag:'smtp'      },
+  636:   { label:'LDAPS',         icon:'📒', color:'#8e44ad', tag:'ldap'      },
+  993:   { label:'IMAPS',         icon:'📨', color:'#3498db', tag:'imap'      },
+  995:   { label:'POP3S',         icon:'📧', color:'#3498db', tag:'pop3'      },
+  1433:  { label:'MSSQL',         icon:'🗄️', color:'#cc2929', tag:'mssql'     },
+  1521:  { label:'Oracle',        icon:'🗄️', color:'#f80000', tag:'oracle'    },
+  2049:  { label:'NFS',           icon:'📁', color:'#1abc9c', tag:'nfs'       },
+  3000:  { label:'Web App',       icon:'🖥️', color:'#e67e22', tag:'webapp'    },
+  3306:  { label:'MySQL',         icon:'🗄️', color:'#3498db', tag:'mysql'     },
+  3389:  { label:'RDP',           icon:'🖥️', color:'#e74c3c', tag:'windows'   },
+  4443:  { label:'Alt-HTTPS',     icon:'🔐', color:'#00b8d4', tag:'https'     },
+  5000:  { label:'Web App',       icon:'🖥️', color:'#e67e22', tag:'webapp'    },
+  5432:  { label:'PostgreSQL',    icon:'🗄️', color:'#336791', tag:'postgres'  },
+  5900:  { label:'VNC',           icon:'🖥️', color:'#e74c3c', tag:'vnc'       },
+  5985:  { label:'WinRM',         icon:'🪟', color:'#0078d4', tag:'windows'   },
+  5986:  { label:'WinRM-S',       icon:'🪟', color:'#0078d4', tag:'windows'   },
+  6379:  { label:'Redis',         icon:'🗄️', color:'#dc382c', tag:'redis'     },
+  6443:  { label:'K8s API',       icon:'⚙️', color:'#326ce5', tag:'k8s'       },
+  8080:  { label:'HTTP-Alt',      icon:'🌍', color:'#f39c12', tag:'webapp'    },
+  8443:  { label:'HTTPS-Alt',     icon:'🔐', color:'#00b8d4', tag:'https'     },
+  8834:  { label:'Nessus',        icon:'🔍', color:'#e67e22', tag:'nessus'    },
+  8888:  { label:'Web App',       icon:'🌍', color:'#e67e22', tag:'webapp'    },
+  9090:  { label:'Web App',       icon:'🌍', color:'#e67e22', tag:'webapp'    },
+  9200:  { label:'Elasticsearch', icon:'🔎', color:'#f6d74a', tag:'elastic'   },
+  9300:  { label:'Elasticsearch', icon:'🔎', color:'#f6d74a', tag:'elastic'   },
+  27017: { label:'MongoDB',       icon:'🗄️', color:'#4db33d', tag:'mongodb'   },
+};
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 6: SERVICE TAGGING
+// ═══════════════════════════════════════════════════════════
+
+function inferTagFromHost(host) {
+  const tags = new Set();
+  const cn = (host.ssl_cn || '').toLowerCase();
+  const svc = host.ports.map(p => (p.service + ' ' + (p.version||'')).toLowerCase()).join(' ');
+  const scripts = JSON.stringify(host.scripts || {}).toLowerCase();
+  const combined = cn + ' ' + svc + ' ' + scripts;
+
+  if (combined.includes('logs.') || combined.includes('cloudwatch') || combined.includes('logging')) tags.add('cloudwatch');
+  if (combined.includes('ecs-a.') || combined.includes('ecs.') || combined.includes('elastic container')) tags.add('ecs');
+  if (combined.includes('ecr.') || combined.includes('dkr.ecr') || combined.includes('elastic container registry')) tags.add('ecr');
+  if (combined.includes('s3.') || combined.includes('amazons3') || (combined.includes('amazon') && combined.includes('s3'))) tags.add('s3');
+  if (combined.includes('secretsmanager') || combined.includes('secrets manager')) tags.add('secrets');
+  if (combined.includes('openvpn') || combined.includes('vpn-as') || combined.includes('access server')) tags.add('vpn');
+  if (/\b(payment[_-]?gateway|netvalve|hpp-api|checkout[_-]?api|pay\.(com|net|io))\b/.test(combined)) tags.add('payment');
+  if (combined.includes('nessus') || combined.includes('nessuswww') || combined.includes('tenable')) tags.add('nessus');
+  if (combined.includes('kubernetes') || combined.includes('k8s') || combined.includes('kube-apiserver')) tags.add('k8s');
+  if (combined.includes('elasticsearch') || combined.includes('kibana') || combined.includes('elastic')) tags.add('elastic');
+
+  host.ports.forEach(p => {
+    const info = PORT_SERVICE_MAP[p.port];
+    if (info) tags.add(info.tag);
+  });
+  if (host.os && host.os.toLowerCase().includes('windows')) tags.add('windows');
+  return [...tags];
+}
+
+const TAG_CONFIG = {
+  cloudwatch: { color: '#ff6b35', icon: '📊', label: 'CloudWatch' },
+  ecs:        { color: '#00d4ff', icon: '🐳', label: 'ECS' },
+  ecr:        { color: '#9b59b6', icon: '📦', label: 'ECR' },
+  s3:         { color: '#f39c12', icon: '🪣', label: 'S3' },
+  secrets:    { color: '#e74c3c', icon: '🔐', label: 'Secrets Mgr' },
+  vpn:        { color: '#2ecc71', icon: '🔒', label: 'OpenVPN' },
+  mysql:      { color: '#3498db', icon: '🗄️', label: 'MySQL' },
+  postgres:   { color: '#336791', icon: '🗄️', label: 'PostgreSQL' },
+  mssql:      { color: '#cc2929', icon: '🗄️', label: 'MSSQL' },
+  mongodb:    { color: '#4db33d', icon: '🗄️', label: 'MongoDB' },
+  redis:      { color: '#dc382c', icon: '🗄️', label: 'Redis' },
+  oracle:     { color: '#f80000', icon: '🗄️', label: 'Oracle DB' },
+  windows:    { color: '#0078d4', icon: '🪟', label: 'Windows' },
+  ssh:        { color: '#2ecc71', icon: '💻', label: 'SSH' },
+  ftp:        { color: '#f39c12', icon: '📂', label: 'FTP' },
+  http:       { color: '#e67e22', icon: '🌍', label: 'HTTP' },
+  https:      { color: '#00d4ff', icon: '🔐', label: 'HTTPS' },
+  webapp:     { color: '#e67e22', icon: '🖥️', label: 'Web App' },
+  nessus:     { color: '#e67e22', icon: '🔍', label: 'Nessus' },
+  payment:    { color: '#ff3355', icon: '💳', label: 'Payment API' },
+  nfs:        { color: '#1abc9c', icon: '📁', label: 'NFS' },
+  dns:        { color: '#9b59b6', icon: '🌐', label: 'DNS' },
+  smtp:       { color: '#3498db', icon: '✉️', label: 'SMTP' },
+  ldap:       { color: '#8e44ad', icon: '📒', label: 'LDAP' },
+  rpc:        { color: '#7f8c8d', icon: '🔌', label: 'RPC' },
+  telnet:     { color: '#e74c3c', icon: '📟', label: 'Telnet' },
+  vnc:        { color: '#e74c3c', icon: '🖥️', label: 'VNC' },
+  k8s:        { color: '#326ce5', icon: '⚙️', label: 'Kubernetes' },
+  elastic:    { color: '#f6d74a', icon: '🔎', label: 'Elasticsearch' },
+  pop3:       { color: '#3498db', icon: '📧', label: 'POP3' },
+  imap:       { color: '#3498db', icon: '📨', label: 'IMAP' },
+  syslog:     { color: '#7f8c8d', icon: '📋', label: 'Syslog' },
+  misc:       { color: '#7f8c8d', icon: '🔵', label: 'Other' },
+};
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 1: CONSTANTS & DATA MODEL
+// ═══════════════════════════════════════════════════════════
+
+const CONSTANTS = {
+  RISK_CRITICAL: 100, RISK_HIGH: 60, RISK_MEDIUM: 20,
+  POINTS_CRITICAL_PORT: 100, POINTS_HIGH_PORT_60: 60, POINTS_HIGH_PORT_40: 40,
+  POINTS_MEDIUM_PORT: 20, POINTS_K8S: 30, POINTS_SSL_EXPIRED: 50, POINTS_SSL_EXPIRING: 25,
+  SSL_EXPIRY_WARN_DAYS: 30,
+  MAP_MIN_SCALE: 0.3, MAP_MAX_SCALE: 4, MAP_ZOOM_FACTOR: 1.15,
+  MAP_NODE_MIN_RADIUS: 6, MAP_NODE_MAX_RADIUS: 20, MAP_GRID_SPACING: 40,
+  MAP_HOVER_THRESHOLD: 14, MAP_SETTLE_FRAMES: 60,
+  CARD_ANIMATION_STAGGER_MS: 10, HOVER_TRANSITION_MS: 150, SEARCH_DEBOUNCE_MS: 150,
+  MAX_TAGS_DISPLAYED: 4, MAX_SCRIPTS_DISPLAYED: 3, SCRIPT_TRUNCATE_LENGTH: 80,
+  VIRTUAL_SCROLL_THRESHOLD: 200,
+  PARSE_CHUNK_SIZE: 100, MAX_SCRIPT_OUTPUT_LENGTH: 300, MAX_SSL_SANS: 5,
+  LS_KEY_SESSION: 'vantage_session', LS_KEY_ANNOTATIONS: 'vantage_annotations', LS_KEY_GROUPS: 'vantage_groups',
+};
+
+/**
+ * @typedef {Object} PortEntry
+ * @property {number} port
+ * @property {string} proto
+ * @property {string} state
+ * @property {string} service
+ * @property {string} [version]
+ * @property {string} [source]
+ */
+
+/**
+ * @typedef {Object} ScanSource
+ * @property {string} filename
+ * @property {string} [args]
+ * @property {string} [startstr]
+ * @property {string} [version]
+ */
+
+/**
+ * @typedef {Object} AnnotationEntry
+ * @property {string} label
+ * @property {string} notes
+ * @property {Array<{ts: string, text: string}>} history
+ */
+
+/**
+ * @typedef {Object} Host
+ * @property {string} ip
+ * @property {string} [hostname]
+ * @property {string} [subnet]
+ * @property {number} [latency]
+ * @property {string} status
+ * @property {string} [reason]
+ * @property {PortEntry[]} ports
+ * @property {Object} [scripts]
+ * @property {string} [ssl_cn]
+ * @property {string} [ssl_exp]
+ * @property {string[]} [ssl_san]
+ * @property {string} [os]
+ * @property {string} [mac]
+ * @property {string} [vendor]
+ * @property {string[]} tags
+ * @property {string} riskLevel
+ * @property {ScanSource[]} sources
+ * @property {string} [group]
+ */
+
+/**
+ * @typedef {Object} ScanMeta
+ * @property {string} [args]
+ * @property {string} [startstr]
+ * @property {string} [version]
+ * @property {string} [filename]
+ * @property {string} [elapsed]
+ */
+
+/**
+ * @typedef {Object} HostGroup
+ * @property {string} name
+ * @property {string} color
+ * @property {string[]} ips
+ */
+
+/**
+ * @typedef {Object} AppState
+ * @property {Host[]} hosts
+ * @property {ScanMeta[]} scans
+ * @property {Object} serviceMap
+ * @property {Object.<string, AnnotationEntry>} annotations
+ * @property {Object.<string, HostGroup>} groups
+ * @property {string} activeFilter
+ * @property {string} searchTerm
+ * @property {string|null} currentAnnIP
+ * @property {string|null} currentAnnLabel
+ * @property {boolean} mapInitialized
+ * @property {number} mapScale
+ * @property {number} mapOffX
+ * @property {number} mapOffY
+ * @property {Object} mapNodePos
+ * @property {CanvasRenderingContext2D|null} mapCtx
+ * @property {HTMLCanvasElement|null} mapCanvas
+ * @property {number} mapW
+ * @property {number} mapH
+ * @property {string|null} mapHoverNode
+ * @property {boolean} mapIsPanning
+ * @property {Object|null} mapPanStart
+ */
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 2: APPLICATION STATE & HELPERS
+// ═══════════════════════════════════════════════════════════
+
+const State = {
+  hosts: [], scans: [], serviceMap: {}, annotations: {}, groups: {},
+  activeFilter: 'all', searchTerm: '',
+  currentAnnIP: null, currentAnnLabel: null,
+  mapInitialized: false, mapScale: 1, mapOffX: 0, mapOffY: 0,
+  mapNodePos: {}, mapCtx: null, mapCanvas: null, mapW: 0, mapH: 0,
+  mapHoverNode: null, mapIsPanning: false, mapPanStart: null,
+};
+
+/** Resets all State properties except annotations */
+function resetState() {
+  State.hosts = [];
+  State.scans = [];
+  State.serviceMap = {};
+  State.groups = {};
+  State.activeFilter = 'all';
+  State.searchTerm = '';
+  State.currentAnnIP = null;
+  State.currentAnnLabel = null;
+  State.mapInitialized = false;
+  State.mapScale = 1;
+  State.mapOffX = 0;
+  State.mapOffY = 0;
+  State.mapNodePos = {};
+  State.mapCtx = null;
+  State.mapCanvas = null;
+  State.mapW = 0;
+  State.mapH = 0;
+  State.mapHoverNode = null;
+  State.mapIsPanning = false;
+  State.mapPanStart = null;
+}
+
+/** @param {string} ip @returns {Host|undefined} */
+function getHostByIP(ip) {
+  return State.hosts.find(h => h.ip === ip);
+}
+
+
+/** @returns {Array<{port: number, proto: string, service: string, hosts: Host[]}>} */
+function getOpenPorts() {
+  const map = {};
+  for (const host of State.hosts) {
+    for (const p of host.ports) {
+      if (p.state !== 'open') continue;
+      const key = `${p.port}/${p.proto}`;
+      if (!map[key]) map[key] = { port: p.port, proto: p.proto, service: p.service, hosts: [] };
+      map[key].hosts.push(host);
+    }
+  }
+  return Object.values(map).sort((a, b) => b.hosts.length - a.hosts.length);
+}
+
+/** @returns {Object.<string, Host[]>} */
+function getSubnets() {
+  const map = {};
+  for (const host of State.hosts) {
+    const s = host.subnet || 'unknown';
+    if (!map[s]) map[s] = [];
+    map[s].push(host);
+  }
+  return map;
+}
+
+/** @returns {ScanMeta} */
+function getCurrentScan() {
+  return State.scans[0] || {};
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 5: RISK SCORING
+// ═══════════════════════════════════════════════════════════
+
+function scoreHost(host) {
+  const portNums = host.ports.filter(p=>p.state==='open').map(p=>p.port);
+  const cn = (host.ssl_cn||'').toLowerCase();
+  const scripts = JSON.stringify(host.scripts||{}).toLowerCase();
+  const combined = cn + ' ' + scripts + ' ' + host.ports.map(p=>p.service+' '+(p.version||'')).join(' ').toLowerCase();
+  let score = 0;
+
+  // Critical risk factors
+  if (portNums.includes(3389)) score += 100;
+  if (portNums.includes(445))  score += 100;
+  if (portNums.includes(23))   score += 100;
+  if (portNums.includes(21) && !combined.includes('ftps')) score += 100;
+  if (portNums.some(p=>[3306,5432,1433,27017,6379,1521].includes(p))) score += 100;
+  if (/\b(payment[_-]?gateway|netvalve|hpp-api|checkout[_-]?api|pay\.(com|net|io))\b/.test(combined)) score += 100;
+
+  // High risk factors
+  if (portNums.includes(5900)) score += 60;
+  if (portNums.includes(2049)) score += 60;
+  if (portNums.includes(9200) || portNums.includes(9300)) score += 60;
+  if (portNums.includes(5985) || portNums.includes(5986)) score += 60;
+  if (portNums.includes(139))  score += 40;
+  if (portNums.includes(111))  score += 40;
+  if (portNums.includes(8834)) score += 40;
+
+  // Medium risk factors
+  if (portNums.includes(22))  score += 20;
+  if (portNums.includes(25) || portNums.includes(587)) score += 20;
+  if (portNums.includes(389)) score += 20;
+  if (portNums.includes(6443)) score += 30;
+
+  // SSL expired
+  if (host.ssl_exp) {
+    const exp = new Date(host.ssl_exp);
+    const now = new Date();
+    const days = (exp - now) / 86400000;
+    if (days < 0) score += 50;
+    else if (days < 30) score += 25;
+  }
+
+  if (score >= 100) return 'critical';
+  if (score >= 60)  return 'high';
+  if (score >= 20)  return 'medium';
+  return 'low';
+}
+
+function ipToNum(ip) {
+  return ip.split('.').reduce((acc, o, i) => acc + parseInt(o) * Math.pow(256, 3-i), 0);
+}
+
+function inferSubnet(ip) {
+  const parts = ip.split('.');
+  return parts.slice(0, 3).join('.') + '.0/24';
+}
+
+function recalculateSubnets() {
+  // Group hosts by /24 prefix
+  const slash24Groups = {};
+  State.hosts.forEach(h => {
+    const parts = h.ip.split('.');
+    const key24 = parts.slice(0, 3).join('.');
+    if (!slash24Groups[key24]) slash24Groups[key24] = [];
+    slash24Groups[key24].push(h);
+  });
+
+  // Check if 8+ /24s share the same /16 — if so, group as /16
+  const slash16Groups = {};
+  Object.keys(slash24Groups).forEach(key24 => {
+    const key16 = key24.split('.').slice(0, 2).join('.');
+    if (!slash16Groups[key16]) slash16Groups[key16] = [];
+    slash16Groups[key16].push(key24);
+  });
+
+  const promotedTo16 = new Set();
+  Object.entries(slash16Groups).forEach(([key16, slash24Keys]) => {
+    if (slash24Keys.length >= 8) promotedTo16.add(key16);
+  });
+
+  // Assign CIDR subnet to each host
+  State.hosts.forEach(h => {
+    const parts = h.ip.split('.');
+    const key16 = parts.slice(0, 2).join('.');
+    if (promotedTo16.has(key16)) {
+      h.subnet = key16 + '.0.0/16';
+    } else {
+      h.subnet = parts.slice(0, 3).join('.') + '.0/24';
+    }
+  });
+}
+
+function mergeHost(existing, incoming) {
+  // Merge ports (union, latest source wins for conflicts)
+  const portMap = {};
+  existing.ports.forEach(p => { portMap[p.port + '/' + p.proto] = p; });
+  incoming.ports.forEach(p => { portMap[p.port + '/' + p.proto] = p; });
+  existing.ports = Object.values(portMap);
+
+  // Merge scripts
+  existing.scripts = Object.assign({}, existing.scripts || {}, incoming.scripts || {});
+
+  // Merge SSL (prefer non-null)
+  if (incoming.ssl_cn) existing.ssl_cn = incoming.ssl_cn;
+  if (incoming.ssl_exp) existing.ssl_exp = incoming.ssl_exp;
+  if (incoming.ssl_san && incoming.ssl_san.length) existing.ssl_san = incoming.ssl_san;
+
+  // Merge OS, MAC
+  if (incoming.os) existing.os = incoming.os;
+  if (incoming.mac) { existing.mac = incoming.mac; existing.vendor = incoming.vendor; }
+
+  // Merge sources
+  if (!existing.sources) existing.sources = [];
+  if (incoming.sources) existing.sources.push(...incoming.sources);
+
+  // Re-tag and re-score
+  existing.tags = inferTagFromHost(existing);
+  existing.riskLevel = scoreHost(existing);
+  return existing;
+}
+
+async function parseNmapXML(xmlText, filename, opts) {
+  const skipDashboard = opts && opts.skipDashboard;
+  showProgress('Parsing XML structure...', 10);
+  await new Promise(r => setTimeout(r, 50));
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'application/xml');
+    const parseErr = doc.querySelector('parsererror');
+    if (parseErr) throw new Error('Invalid XML: ' + parseErr.textContent.slice(0, 100));
+
+    const nmaprun = doc.querySelector('nmaprun');
+    if (!nmaprun) throw new Error('Not a valid Nmap XML file (no <nmaprun> root element)');
+
+    const scanEntry = {
+      args: nmaprun.getAttribute('args') || 'N/A',
+      startstr: nmaprun.getAttribute('startstr') || 'N/A',
+      version: nmaprun.getAttribute('version') || '?',
+      filename: filename,
+    };
+    const runstats = doc.querySelector('finished');
+    if (runstats) scanEntry.elapsed = runstats.getAttribute('elapsed') || '?';
+    State.scans.push(scanEntry);
+
+    showProgress('Extracting hosts...', 30);
+
+    const hostElements = doc.querySelectorAll('host');
+    const totalHosts = hostElements.length;
+    const chunkSize = CONSTANTS.PARSE_CHUNK_SIZE;
+
+    for (let idx = 0; idx < totalHosts; idx++) {
+      const hostEl = hostElements[idx];
+      const addrEl = hostEl.querySelector('address[addrtype="ipv4"], address[addrtype="ipv6"]');
+      if (!addrEl) continue;
+      const ip = addrEl.getAttribute('addr');
+
+      const hostnameEl = hostEl.querySelector('hostname');
+      const hostname = hostnameEl ? hostnameEl.getAttribute('name') : ip;
+
+      const statusEl = hostEl.querySelector('status');
+      const hostState = statusEl ? statusEl.getAttribute('state') : 'unknown';
+      const reason = statusEl ? statusEl.getAttribute('reason') : '';
+
+      const rttEl = hostEl.querySelector('times');
+      let latency = null;
+      if (rttEl) {
+        const srtt = parseInt(rttEl.getAttribute('srtt') || '0');
+        latency = srtt > 0 ? (srtt / 1000).toFixed(3) : null;
+      }
+
+      // BUG FIX: Only select <ports><port> — not <extraports>
+      const ports = [];
+      const portsEl = hostEl.querySelector('ports');
+      if (portsEl) {
+        portsEl.querySelectorAll(':scope > port').forEach(portEl => {
+          const stateEl = portEl.querySelector('state');
+          const serviceEl = portEl.querySelector('service');
+          const pState = stateEl ? stateEl.getAttribute('state') : 'unknown';
+
+          const portNum = parseInt(portEl.getAttribute('portid'));
+          const proto = portEl.getAttribute('protocol');
+          const svcName = serviceEl ? (serviceEl.getAttribute('name') || '') : '';
+          const product = serviceEl ? (serviceEl.getAttribute('product') || '') : '';
+          const version = serviceEl ? (serviceEl.getAttribute('version') || '') : '';
+          const tunnel = serviceEl ? (serviceEl.getAttribute('tunnel') || '') : '';
+          const extrainfo = serviceEl ? (serviceEl.getAttribute('extrainfo') || '') : '';
+
+          let displayService = svcName;
+          if (tunnel === 'ssl' && svcName) displayService = 'ssl/' + svcName;
+          const verStr = [product, version, extrainfo].filter(Boolean).join(' ').trim().slice(0, 60);
+          ports.push({ port: portNum, proto, state: pState, service: displayService || proto, version: verStr, source: filename });
+        });
+      }
+
+      const scripts = {};
+      hostEl.querySelectorAll('port script, hostscript script').forEach(scriptEl => {
+        const id = scriptEl.getAttribute('id');
+        const output = scriptEl.getAttribute('output') || '';
+        if (id) scripts[id] = output.slice(0, 300);
+      });
+
+      let ssl_cn = null, ssl_exp = null, ssl_san = [];
+      const sslScript = hostEl.querySelector('script[id="ssl-cert"]');
+      if (sslScript) {
+        const cnEl = sslScript.querySelector('table[key="subject"] elem[key="commonName"]');
+        if (cnEl) ssl_cn = cnEl.textContent.trim();
+        const expEl = sslScript.querySelector('table[key="validity"] elem[key="notAfter"]');
+        if (expEl) ssl_exp = expEl.textContent.trim().split('T')[0];
+        const sanEl = sslScript.querySelector('table[key="extensions"] table elem[key="value"]');
+        if (sanEl) ssl_san = sanEl.textContent.split(',').map(s => s.replace('DNS:','').trim()).slice(0,5);
+      }
+
+      let os = null;
+      const osEl = hostEl.querySelector('osmatch');
+      if (osEl) os = osEl.getAttribute('name');
+
+      const macEl = hostEl.querySelector('address[addrtype="mac"]');
+      const mac = macEl ? macEl.getAttribute('addr') : null;
+      const vendor = macEl ? macEl.getAttribute('vendor') : null;
+
+      const subnet = inferSubnet(ip);
+
+      const host = { ip, hostname, subnet, latency, status: hostState, reason, ports, scripts, ssl_cn, ssl_exp, ssl_san, os, mac, vendor, sources: [{ filename }] };
+      host.tags = inferTagFromHost(host);
+      host.riskLevel = scoreHost(host);
+
+      // Deduplicate: merge if host with same IP already exists
+      const existing = State.hosts.find(h => h.ip === ip);
+      if (existing) {
+        mergeHost(existing, host);
+      } else {
+        State.hosts.push(host);
+      }
+
+      // Yield to browser after each chunk
+      if ((idx + 1) % chunkSize === 0) {
+        const pct = 30 + Math.round((idx / totalHosts) * 40);
+        showProgress('Extracting hosts...', pct, idx + 1);
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    recalculateSubnets();
+
+    showProgress('Building service map...', 70);
+    State.serviceMap = {};
+    State.hosts.forEach(h => h.tags.forEach(t => {
+      if (!State.serviceMap[t]) State.serviceMap[t] = 0;
+      State.serviceMap[t]++;
+    }));
+
+    if (!skipDashboard) {
+      showProgress('Rendering dashboard...', 90);
+      await new Promise(r => setTimeout(r, 100));
+
+      buildDashboard();
+      showProgress('Done!', 100);
+
+      await new Promise(r => setTimeout(r, 300));
+      document.getElementById('progressScreen').style.display = 'none';
+      document.getElementById('dashboardScreen').style.display = 'block';
+    }
+
+  } catch(err) {
+    document.getElementById('progressScreen').style.display = 'none';
+    document.getElementById('uploadScreen').style.display = 'flex';
+    alert('Error parsing XML: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 7: DASHBOARD BUILDER
+// ═══════════════════════════════════════════════════════════
+
+function buildDashboard() {
+  const totalOpen = State.hosts.filter(h => h.ports.some(p=>p.state==='open')).length;
+  const totalFiltered = State.hosts.filter(h => h.ports.length === 0 || h.ports.every(p=>p.state==='filtered')).length;
+  const totalPorts = State.hosts.reduce((a, h) => a + h.ports.filter(p=>p.state==='open').length, 0);
+  const subnets = new Set(State.hosts.map(h=>h.subnet)).size;
+
+  document.getElementById('dashTitle').textContent = 'Vantage';
+  const scanCount = State.scans.length;
+  const subtitle = scanCount > 1
+    ? scanCount + ' SCANS LOADED'
+    : (getCurrentScan().filename || 'VANTAGE').toUpperCase().replace('.XML','') + ' // NMAP ' + getCurrentScan().version;
+  document.getElementById('dashSub').textContent = subtitle;
+  const argsStr = (getCurrentScan().args || '');
+  if (scanCount > 1) {
+    document.getElementById('scanMeta').innerHTML =
+      `SCANS: <span>${scanCount}</span><br>` +
+      `HOSTS: <span>${State.hosts.length}</span><br>` +
+      `MERGED: <span>${State.hosts.filter(h => h.sources.length > 1).length} hosts</span>`;
+  } else {
+    document.getElementById('scanMeta').innerHTML =
+      `DATE: <span>${escHtml(getCurrentScan().startstr)}</span><br>` +
+      `CMD: <span>${escHtml(argsStr.slice(0,60))}${argsStr.length>60?'…':''}</span><br>` +
+      `DURATION: <span>${getCurrentScan().elapsed ? getCurrentScan().elapsed+'s' : 'N/A'}</span>`;
+  }
+
+  const statsBar = document.getElementById('statsBar');
+  statsBar.innerHTML = '';
+  const critCount = State.hosts.filter(h=>h.riskLevel==='critical').length;
+  const highCount = State.hosts.filter(h=>h.riskLevel==='high').length;
+
+  // Build tooltip data
+  var portFreqMap = {};
+  State.hosts.forEach(function(h) { h.ports.forEach(function(p) { if(p.state==='open') portFreqMap[p.port]=(portFreqMap[p.port]||0)+1; }); });
+  var top10Ports = Object.entries(portFreqMap).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  var criticalIPs = State.hosts.filter(function(h){return h.riskLevel==='critical';}).map(function(h){return h.ip;}).slice(0,10);
+  var subnetMap = {};
+  State.hosts.forEach(function(h){ subnetMap[h.subnet]=(subnetMap[h.subnet]||0)+1; });
+  var subnetEntries = Object.entries(subnetMap).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+
+  var portTipHtml = top10Ports.map(function(e){
+    var info = PORT_SERVICE_MAP[e[0]];
+    return '<div class="stat-tip-row"><span>' + e[0] + (info ? '/' + escHtml(info.label) : '') + '</span> ' + e[1] + ' hosts</div>';
+  }).join('');
+  var critTipHtml = criticalIPs.map(function(ip){ return '<div class="stat-tip-row"><span>' + escHtml(ip) + '</span></div>'; }).join('');
+  if(!critTipHtml) critTipHtml = '<div class="stat-tip-row" style="color:var(--text3)">No critical hosts</div>';
+  var subnetTipHtml = subnetEntries.map(function(e){ return '<div class="stat-tip-row"><span>' + escHtml(e[0]) + '</span> ' + e[1] + ' hosts</div>'; }).join('');
+
+  var osByCount = {};
+  State.hosts.forEach(function(h){ var o = h.os || 'Unknown'; osByCount[o]=(osByCount[o]||0)+1; });
+  var topOS = Object.entries(osByCount).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+  var osTipHtml = topOS.map(function(e){ return '<div class="stat-tip-row"><span>' + escHtml(e[0].slice(0,30)) + '</span> ' + e[1] + '</div>'; }).join('');
+
+  [
+    { label:'Total Hosts',         value: State.hosts.length, sub:'Scanned',           color:'#c8e6ff', tip: osTipHtml || '<div class="stat-tip-row" style="color:var(--text3)">No OS data</div>' },
+    { label:'Hosts w/ Open Ports', value: totalOpen,           sub: Math.round(totalOpen/Math.max(State.hosts.length,1)*100)+'% responsive', color:'#00ff9d', tip: '<div class="stat-tip-row">' + totalOpen + ' open / ' + totalFiltered + ' filtered</div>' },
+    { label:'Fully Filtered',      value: totalFiltered,       sub:'All ports blocked',  color:'#1a3a5c', tip: '<div class="stat-tip-row" style="color:var(--text3)">Hosts with all ports blocked</div>' },
+    { label:'Open Ports',          value: totalPorts,          sub:'Across all hosts',   color:'#00d4ff', tip: portTipHtml },
+    { label:'Subnets',             value: subnets,             sub:'Unique /24 segments',color:'#f39c12', tip: subnetTipHtml },
+    { label:'Critical Hosts',      value: critCount,           sub:highCount+' high risk',color:'#ff3355', tip: critTipHtml },
+  ].forEach(function(s) {
+    var el = document.createElement('div');
+    el.className = 'stat-item';
+    el.innerHTML = '<div class="stat-label">' + escHtml(s.label) + '</div><div class="stat-value" style="color:' + s.color + '">' + s.value + '</div><div class="stat-sub">' + escHtml(s.sub) + '</div>' +
+      '<div class="stat-tooltip">' + s.tip + '</div>';
+    statsBar.appendChild(el);
+  });
+
+  document.getElementById('cnt-all').textContent = State.hosts.length;
+  document.getElementById('cnt-open').textContent = totalOpen;
+  document.getElementById('cnt-filtered').textContent = totalFiltered;
+  document.getElementById('cnt-risk-critical').textContent = critCount;
+  document.getElementById('cnt-risk-high').textContent = highCount;
+  document.getElementById('cnt-risk-medium').textContent = State.hosts.filter(h=>h.riskLevel==='medium').length;
+
+  buildServiceFilters();
+  buildSubnetFilters_();
+  buildScanFilters();
+  buildGroupFilters();
+  buildHostCards_();
+  buildSubnetView_();
+  buildRiskView_();
+  buildDiffView();
+  updateAnnotatedCount();
+
+  // Timeline tab: show only when 2+ scans
+  var timelineTab = document.getElementById('timelineTab');
+  if (timelineTab) timelineTab.style.display = State.scans.length >= 2 ? '' : 'none';
+
+  // Save session to localStorage
+  saveToLocalStorage();
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 8: SIDEBAR FILTERS
+// ═══════════════════════════════════════════════════════════
+
+function buildServiceFilters() {
+  const sec = document.getElementById('serviceFilters');
+  sec.innerHTML = '<div class="sidebar-title">By Service</div>';
+  Object.entries(State.serviceMap).sort((a,b)=>b[1]-a[1]).forEach(([tag, count]) => {
+    const cfg = TAG_CONFIG[tag] || { color:'#7f8c8d', icon:'🔵', label: tag };
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.dataset.filter = tag;
+    btn.innerHTML = `<div class="filter-dot" style="background:${cfg.color}"></div>${escHtml(cfg.icon + ' ' + cfg.label)}<span class="filter-count">${count}</span>`;
+    btn.onclick = () => filterHosts(tag, btn);
+    sec.appendChild(btn);
+  });
+}
+
+function buildSubnetFilters_() {
+  const subnets = {};
+  State.hosts.forEach(h => { if(!subnets[h.subnet]) subnets[h.subnet]=0; subnets[h.subnet]++; });
+  const container = document.getElementById('subnetFilters');
+  container.innerHTML = '';
+  Object.entries(subnets).sort().forEach(([subnet, count]) => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.dataset.filter = '__subnet__' + subnet;
+    btn.innerHTML = `<div class="filter-dot" style="background:#2d6491"></div>${escHtml(subnet)}<span class="filter-count">${count}</span>`;
+    btn.onclick = () => {
+      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      State.activeFilter = '__subnet__' + subnet;
+      applyFilters();
+      switchTab('hosts', document.querySelector('[data-tab="hosts"]'));
+    };
+    container.appendChild(btn);
+  });
+}
+
+function buildScanFilters() {
+  const sec = document.getElementById('scanFiltersSec');
+  const container = document.getElementById('scanFilters');
+  if (!sec || !container) return;
+  if (State.scans.length < 2) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  container.innerHTML = '';
+  State.scans.forEach(s => {
+    const count = State.hosts.filter(h => h.sources.some(src => src.filename === s.filename)).length;
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.dataset.filter = 'scan:' + s.filename;
+    btn.innerHTML = '<div class="filter-dot" style="background:var(--warn)"></div>' + escHtml(s.filename) + '<span class="filter-count">' + count + '</span>';
+    btn.onclick = () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      State.activeFilter = 'scan:' + s.filename;
+      applyFilters();
+      switchTab('hosts', document.querySelector('[data-tab="hosts"]'));
+    };
+    container.appendChild(btn);
+  });
+}
+
+function filterSidebar() {
+  const q = document.getElementById('sidebarSearch').value.toLowerCase();
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    const txt = btn.textContent.toLowerCase();
+    btn.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 9: HOST CARDS & RENDERING
+// ═══════════════════════════════════════════════════════════
+
+const ANN_LABEL_CONFIG = {
+  confirmed:   { color: '#00ff9d', bg: 'rgba(0,255,157,0.12)',  text: '✅ Confirmed' },
+  investigate: { color: '#ff9900', bg: 'rgba(255,153,0,0.12)', text: '🔍 Investigate' },
+  oos:         { color: '#6fa3c8', bg: 'rgba(111,163,200,0.1)',text: '⛔ Out of Scope' },
+  patched:     { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)',text: '🩹 Patched' },
+  compromised: { color: '#ff3355', bg: 'rgba(255,51,85,0.12)',  text: '💀 Compromised' },
+};
+
+/**
+ * Render a single host card HTML string.
+ * @param {Host} host - Host data object
+ * @returns {string} HTML string for one card
+ */
+function renderHostCard(host) {
+  const openPorts = host.ports.filter(p => p.state === 'open');
+  const hasOpen = openPorts.length > 0;
+  const mainTag = host.tags[0];
+  const cfg = mainTag ? (TAG_CONFIG[mainTag] || TAG_CONFIG.misc) : null;
+  const iconBg = cfg ? cfg.color + '22' : '#1a3a5c33';
+
+  const riskGlow = host.riskLevel === 'critical' ? ' risk-glow-critical' : host.riskLevel === 'high' ? ' risk-glow-high' : '';
+  const ipDash = host.ip.replace(/\./g, '-');
+
+  // ── Data attributes for filtering ──
+  const dataAttrs = [
+    `data-ip="${escHtml(host.ip)}"`,
+    `data-hostname="${escHtml(host.hostname || '')}"`,
+    `data-subnet="${escHtml(host.subnet)}"`,
+    `data-risk="${escHtml(host.riskLevel)}"`,
+    `data-ports="${openPorts.map(p => p.port).join(',')}"`,
+    `data-tags="${escHtml(host.tags.join(','))}"`,
+    `data-latency="${host.latency || '9999'}"`,
+    `data-status="${escHtml(host.status)}"`,
+    `data-cn="${escHtml(host.ssl_cn || '')}"`,
+    `data-portcount="${openPorts.length}"`,
+    `data-search="${escHtml([host.ip, host.hostname || '', host.ssl_cn || '', host.tags.join(' '), openPorts.map(p => p.port).join(' '), host.subnet].join(' ').toLowerCase())}"`,
+  ].join(' ');
+
+  // ── Service tags ──
+  const visibleTags = host.tags.slice(0, CONSTANTS.MAX_TAGS_DISPLAYED);
+  const overflowCount = host.tags.length - visibleTags.length;
+  const serviceTags = visibleTags.map(t => {
+    const c = TAG_CONFIG[t] || TAG_CONFIG.misc;
+    return `<span class="service-tag" style="color:${c.color};border-color:${c.color}44;background:${c.color}11">${c.icon} ${escHtml(c.label)}</span>`;
+  }).join('') + (overflowCount > 0 ? `<span class="service-tag" style="color:var(--text3);border-color:var(--border)">+${overflowCount}</span>` : '');
+
+  // ── Ports ──
+  const portsHtml = openPorts.length > 0
+    ? openPorts.map(p => {
+        const info = PORT_SERVICE_MAP[p.port];
+        const color = info ? info.color : '#2d6491';
+        return `<div class="port-row" style="border-left-color:${color}">
+          <span class="port-num">${p.port}/${escHtml(p.proto || 'tcp')}</span>
+          <span class="port-svc">${escHtml(p.service)}</span>
+          <span class="port-ver" title="${escHtml(p.version)}">${escHtml(p.version)}</span>
+        </div>`;
+      }).join('')
+    : `<div style="font-family:var(--mono);font-size:11px;color:var(--text3);padding:5px 0">All scanned ports filtered — host behind firewall</div>`;
+
+  // ── SSL certificate info ──
+  let sslHtml = '';
+  if (host.ssl_cn) {
+    let sslExpWarn = false;
+    let sslExpLabel = host.ssl_exp || '';
+    if (host.ssl_exp) {
+      const exp = new Date(host.ssl_exp);
+      const daysLeft = (exp - new Date()) / 86400000;
+      if (daysLeft < 0) { sslExpLabel = host.ssl_exp + ' \u26a0\ufe0f EXPIRED'; sslExpWarn = true; }
+      else if (daysLeft < CONSTANTS.SSL_EXPIRY_WARN_DAYS) { sslExpLabel = host.ssl_exp + ' \u26a0\ufe0f <' + CONSTANTS.SSL_EXPIRY_WARN_DAYS + 'd'; sslExpWarn = true; }
+    }
+    const sanLimit = CONSTANTS.MAX_SSL_SANS || 5;
+    sslHtml = `<div class="ssl-info${sslExpWarn ? ' ssl-warn' : ''}">
+      <span class="cn">CN: ${escHtml(host.ssl_cn)}</span>
+      ${host.ssl_exp ? `<br>EXP: ${escHtml(sslExpLabel)}` : ''}
+      ${host.ssl_san.length ? `<br>SAN: ${escHtml(host.ssl_san.slice(0, sanLimit).join(', '))}${host.ssl_san.length > sanLimit ? '\u2026' : ''}` : ''}
+    </div>`;
+  }
+
+  // ── Scripts (collapsible) ──
+  const showScripts = Object.entries(host.scripts || {})
+    .filter(([k]) => ['http-title','smb-os-discovery','rdp-ntlm-info','mysql-info','ssh-hostkey','http-auth','http-server-header','nbstat'].includes(k))
+    .slice(0, CONSTANTS.MAX_SCRIPTS_DISPLAYED);
+  const scriptsHtml = showScripts.length ? `
+    <div class="host-scripts collapsed" data-expanded="false">
+      <div class="scripts-toggle" onclick="this.parentElement.classList.toggle('collapsed');this.parentElement.dataset.expanded=this.parentElement.dataset.expanded==='true'?'false':'true'">&#9656; Scripts (${showScripts.length})</div>
+      <div class="scripts-body">
+        <div class="scripts-info">
+          ${showScripts.map(([k, v]) => `<span class="script-key">[${escHtml(k)}]</span> ${escHtml(v.replace(/\n/g, ' ').slice(0, CONSTANTS.SCRIPT_TRUNCATE_LENGTH))}${v.length > CONSTANTS.SCRIPT_TRUNCATE_LENGTH ? '\u2026' : ''}<br>`).join('')}
+        </div>
+      </div>
+    </div>` : '';
+
+  // ── Risk badge ──
+  const riskBadgeClass = host.riskLevel === 'critical' ? 'card-risk-critical' : host.riskLevel === 'high' ? 'card-risk-high' : host.riskLevel === 'medium' ? 'card-risk-medium' : '';
+  const riskBadgeHtml = riskBadgeClass ? `<span class="card-risk-badge ${riskBadgeClass}">${host.riskLevel.toUpperCase()}</span>` : '';
+
+  // ── Status & latency ──
+  const statusClass = hasOpen ? 'status-open' : 'status-filtered';
+  const statusText = hasOpen ? 'OPEN' : 'FILTERED';
+  const latencyPct = host.latency ? Math.min(parseFloat(host.latency) / 10 * 100, 100) : 0;
+
+  // ── Annotation strip ──
+  const ann = State.annotations[host.ip];
+  let annStripHtml = '';
+  if (ann) {
+    const annCfg = ann.label ? ANN_LABEL_CONFIG[ann.label] : null;
+    annStripHtml = `<div id="annstrip-${escHtml(ipDash)}" class="annotation-strip">
+      ${annCfg ? `<span class="ann-label-tag" style="background:${annCfg.color}22;color:${annCfg.color};border:1px solid ${annCfg.color}44">${annCfg.text}</span>` : ''}
+      ${ann.notes ? `<span style="color:var(--text2)">${escHtml(ann.notes)}</span>` : ''}
+    </div>`;
+  } else {
+    annStripHtml = `<div id="annstrip-${escHtml(ipDash)}" class="annotation-strip" style="display:none"></div>`;
+  }
+
+  return `<div class="host-card${riskGlow}" id="card-${ipDash}" ${dataAttrs}>
+    <div class="host-header">
+      <div class="host-icon" style="background:${iconBg};">${cfg ? cfg.icon : '\ud83d\udda5\ufe0f'}</div>
+      <div style="min-width:0;flex:1">
+        <div class="host-ip">${escHtml(host.ip)}</div>
+        <div class="host-hostname">${escHtml(host.hostname)}</div>
+      </div>
+      ${riskBadgeHtml}
+      <div class="host-status ${statusClass}">${statusText}</div>
+      <button class="annotate-btn" title="Annotate host" onclick="openAnnModal('${escHtml(host.ip)}',event)">📝</button>
+    </div>
+    <div class="host-body">
+      ${serviceTags ? `<div class="service-tag-row">${serviceTags}</div>` : ''}
+      <div class="port-list">${portsHtml}</div>
+      ${sslHtml}
+      ${scriptsHtml}
+      ${host.os ? `<div style="margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--text3)">\ud83d\udda5 OS: <span style="color:var(--text2)">${escHtml(host.os.slice(0, 60))}</span></div>` : ''}
+      ${host.mac ? `<div style="margin-top:3px;font-family:var(--mono);font-size:10px;color:var(--text3)">MAC: <span style="color:var(--text2)">${escHtml(host.mac)}</span>${host.vendor ? ` (${escHtml(host.vendor)})` : ''}</div>` : ''}
+    </div>
+    ${annStripHtml}
+    <div class="host-footer">
+      <span>RTT: ${host.latency ? parseFloat(host.latency).toFixed(2) + 'ms' : 'N/A'}</span>
+      <div class="latency-bar"><div class="latency-fill" style="width:${latencyPct}%"></div></div>
+      <span>${escHtml(host.subnet)}</span>
+    </div>
+  </div>`;
+}
+
+function buildHostCards_() {
+  const grid = document.getElementById('hostGrid');
+  grid.innerHTML = State.hosts.map((host, i) =>
+    renderHostCard(host).replace(
+      'class="host-card',
+      `style="animation-delay:${i * CONSTANTS.CARD_ANIMATION_STAGGER_MS}ms" class="host-card`
+    )
+  ).join('');
+  // Attach click handlers for annotation modal
+  grid.querySelectorAll('.host-card').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.classList.contains('annotate-btn')) return;
+      if (e.target.classList.contains('scripts-toggle')) return;
+      openAnnModal(card.dataset.ip, e);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 10: FILTERING, SEARCH & SORT
+// ═══════════════════════════════════════════════════════════
+
+
+function filterHosts(type, btn) {
+  State.activeFilter = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  applyFilters();
+}
+
+let _searchTimeout = null;
+function searchHosts() {
+  clearTimeout(_searchTimeout);
+  _searchTimeout = setTimeout(() => {
+    State.searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    applyFilters();
+  }, CONSTANTS.SEARCH_DEBOUNCE_MS);
+}
+
+function highlightMatch(text, term) {
+  if (!term) return escHtml(text);
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(${escaped})`, 'gi');
+  return escHtml(text).replace(re, '<mark class="search-hl">$1</mark>');
+}
+
+function clearSearchHighlights() {
+  document.querySelectorAll('.host-card:not(.filtered)').forEach(card => {
+    card.querySelectorAll('.host-ip, .host-hostname, .port-svc, .port-num, .port-ver').forEach(el => {
+      const orig = el.getAttribute('data-original');
+      if (orig !== null) { el.textContent = orig; el.removeAttribute('data-original'); }
+    });
+  });
+}
+
+function applySearchHighlights(term) {
+  if (!term) return;
+  document.querySelectorAll('.host-card:not(.filtered)').forEach(card => {
+    card.querySelectorAll('.host-ip, .host-hostname, .port-svc, .port-num, .port-ver').forEach(el => {
+      if (el.getAttribute('data-original') === null) el.setAttribute('data-original', el.textContent);
+      const orig = el.getAttribute('data-original');
+      if (orig.toLowerCase().includes(term.toLowerCase())) {
+        el.innerHTML = highlightMatch(orig, term);
+      }
+    });
+  });
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  State.searchTerm = '';
+  clearSearchHighlights();
+  applyFilters();
+}
+
+function getSortValue(card, sortBy) {
+  if (sortBy === 'ip') return ipToNum(card.dataset.ip);
+  if (sortBy === 'risk') {
+    const m = { critical: 0, high: 1, medium: 2, low: 3 };
+    return m[card.dataset.risk] ?? 4;
+  }
+  if (sortBy === 'ports') return -parseInt(card.dataset.portcount || '0');
+  if (sortBy === 'latency') return parseFloat(card.dataset.latency || '9999');
+  if (sortBy === 'subnet') return card.dataset.subnet + card.dataset.ip;
+  return 0;
+}
+
+function applyFilters() {
+  const cards = [...document.querySelectorAll('.host-card')];
+  const sortBy = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'ip';
+
+  // Determine annotation notes for search
+  let visible = 0;
+  cards.forEach(card => {
+    let show = true;
+    const f = State.activeFilter;
+    if (f === 'open') {
+      show = card.dataset.ports.length > 0;
+    } else if (f === 'filtered') {
+      show = card.dataset.ports.length === 0;
+    } else if (f === 'annotated') {
+      show = !!State.annotations[card.dataset.ip];
+    } else if (f === '__risk__critical') {
+      show = card.dataset.risk === 'critical';
+    } else if (f === '__risk__high') {
+      show = card.dataset.risk === 'high';
+    } else if (f === '__risk__medium') {
+      show = card.dataset.risk === 'medium';
+    } else if (f.startsWith('__subnet__')) {
+      show = card.dataset.subnet === f.slice(10);
+    } else if (f.startsWith('scan:')) {
+      const scanFile = f.slice(5);
+      const host = getHostByIP(card.dataset.ip);
+      show = !!host && host.sources.some(s => s.filename === scanFile);
+    } else if (f.startsWith('group:')) {
+      const groupName = f.slice(6);
+      const host = getHostByIP(card.dataset.ip);
+      show = !!host && host.group === groupName;
+    } else if (f !== 'all') {
+      show = (',' + card.dataset.tags + ',').includes(',' + f + ',');
+    }
+
+    if (State.searchTerm && show) {
+      const ann = State.annotations[card.dataset.ip];
+      const annText = ann ? (ann.label + ' ' + (ann.notes||'')).toLowerCase() : '';
+      const haystack = [card.dataset.ip, card.dataset.cn, card.dataset.hostname, card.dataset.tags, card.dataset.ports, card.dataset.subnet, annText].join(' ').toLowerCase();
+      show = haystack.includes(State.searchTerm);
+    }
+
+    card.classList.toggle('filtered', !show);
+    if (show) visible++;
+  });
+
+  // Sort visible cards
+  const grid = document.getElementById('hostGrid');
+  const visibleCards = cards.filter(c => !c.classList.contains('filtered'));
+  const hiddenCards = cards.filter(c => c.classList.contains('filtered'));
+  visibleCards.sort((a, b) => {
+    const av = getSortValue(a, sortBy), bv = getSortValue(b, sortBy);
+    return av < bv ? -1 : av > bv ? 1 : 0;
+  });
+  [...visibleCards, ...hiddenCards].forEach(c => grid.appendChild(c));
+
+  const st = document.getElementById('searchStatus');
+  if (st) st.textContent = State.searchTerm || State.activeFilter !== 'all' ? `${visible} shown` : '';
+
+  // Search highlighting
+  clearSearchHighlights();
+  if (State.searchTerm) applySearchHighlights(State.searchTerm);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 11: ANNOTATIONS
+// ═══════════════════════════════════════════════════════════
+
+
+function openAnnModal(ip, e) {
+  if (e) e.stopPropagation();
+  State.currentAnnIP = ip;
+  State.currentAnnLabel = null;
+  document.getElementById('annModalIP').textContent = ip;
+  const existing = State.annotations[ip];
+  document.getElementById('annNotes').value = existing ? (existing.notes || '') : '';
+  // reset label buttons
+  document.querySelectorAll('.ann-label-opt').forEach(el => {
+    el.classList.remove('selected');
+    el.style.background = '';
+    el.style.color = '';
+    el.style.borderColor = '';
+  });
+  if (existing && existing.label) {
+    State.currentAnnLabel = existing.label;
+    const sel = document.querySelector('.ann-label-opt[data-label="' + existing.label + '"]');
+    if (sel) highlightLabelBtn(sel);
+  }
+
+  // Populate group dropdown
+  var groupSelect = document.getElementById('annGroupSelect');
+  if (groupSelect) {
+    var host = getHostByIP(ip);
+    var currentGroup = host ? (host.group || '') : '';
+    groupSelect.innerHTML = '<option value="">-- No Group --</option>';
+    Object.entries(State.groups).forEach(function(entry) {
+      var name = entry[0];
+      var g = entry[1];
+      var selected = currentGroup === name ? ' selected' : '';
+      groupSelect.innerHTML += '<option value="' + escHtml(name) + '"' + selected + '>' + escHtml(name) + '</option>';
+    });
+  }
+
+  // Show annotation history
+  var historyDiv = document.getElementById('annHistory');
+  if (historyDiv) {
+    var history = existing && existing.history ? existing.history : [];
+    if (history.length) {
+      historyDiv.innerHTML = '<div class="ann-history-label">History</div>' +
+        history.slice().reverse().map(function(entry) {
+          var labelCfg = entry.label ? ANN_LABEL_CONFIG[entry.label] : null;
+          var labelText = labelCfg ? labelCfg.text : (entry.label || '');
+          var ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+          return '<div class="ann-history-entry">' +
+            '<span style="color:var(--text3)">' + escHtml(ts) + '</span> ' +
+            (labelText ? '<span style="color:' + (labelCfg ? labelCfg.color : 'var(--text2)') + '">' + escHtml(labelText) + '</span> ' : '') +
+            (entry.notes ? '<span style="color:var(--text2)">' + escHtml(entry.notes.slice(0, 80)) + '</span>' : '') +
+            '</div>';
+        }).join('');
+    } else {
+      historyDiv.innerHTML = '';
+    }
+  }
+
+  document.getElementById('annModal').style.display = 'flex';
+}
+
+function closeAnnModal(e) {
+  if (!e || e.target === document.getElementById('annModal')) {
+    document.getElementById('annModal').style.display = 'none';
+    State.currentAnnIP = null;
+  }
+}
+
+function selectAnnLabel(el) {
+  document.querySelectorAll('.ann-label-opt').forEach(o => {
+    o.classList.remove('selected');
+    o.style.background = '';
+    o.style.color = '';
+    o.style.borderColor = '';
+  });
+  State.currentAnnLabel = el.dataset.label;
+  highlightLabelBtn(el);
+}
+
+function highlightLabelBtn(el) {
+  const cfg = ANN_LABEL_CONFIG[el.dataset.label];
+  if (cfg) {
+    el.classList.add('selected');
+    el.style.background = cfg.bg;
+    el.style.color = cfg.color;
+    el.style.borderColor = cfg.color;
+  }
+}
+
+function saveAnnotation() {
+  if (!State.currentAnnIP) return;
+  var ip = State.currentAnnIP;
+  var notes = document.getElementById('annNotes').value.trim();
+  var existing = State.annotations[ip];
+
+  // Save group assignment to the host
+  var groupSelect = document.getElementById('annGroupSelect');
+  var selectedGroup = groupSelect ? groupSelect.value : '';
+  var host = getHostByIP(ip);
+  if (host) host.group = selectedGroup || undefined;
+
+  if (!notes && !State.currentAnnLabel) {
+    delete State.annotations[ip];
+  } else {
+    var history = (existing && existing.history) ? existing.history : [];
+    history.push({ label: State.currentAnnLabel, notes: notes, timestamp: new Date().toISOString() });
+    State.annotations[ip] = { label: State.currentAnnLabel, notes: notes, history: history };
+  }
+  document.getElementById('annModal').style.display = 'none';
+  refreshAnnotationStrip(ip);
+  updateAnnotatedCount();
+  buildGroupFilters();
+  State.currentAnnIP = null;
+  applyFilters();
+  saveToLocalStorage();
+}
+
+function clearAnnotation() {
+  if (!State.currentAnnIP) return;
+  delete State.annotations[State.currentAnnIP];
+  document.getElementById('annModal').style.display = 'none';
+  refreshAnnotationStrip(State.currentAnnIP);
+  updateAnnotatedCount();
+  State.currentAnnIP = null;
+  applyFilters();
+  saveToLocalStorage();
+}
+
+function refreshAnnotationStrip(ip) {
+  const id = 'annstrip-' + ip.replace(/\./g,'-');
+  const strip = document.getElementById(id);
+  if (!strip) return;
+  const ann = State.annotations[ip];
+  if (!ann) { strip.style.display = 'none'; return; }
+  const cfg = ann.label ? ANN_LABEL_CONFIG[ann.label] : null;
+  strip.style.display = 'flex';
+  strip.innerHTML = (cfg ? `<span class="ann-label-tag" style="background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.color}">${cfg.text}</span>` : '') +
+    (ann.notes ? `<span style="color:var(--text2);font-size:10px">${escHtml(ann.notes.slice(0,100))}</span>` : '');
+}
+
+function updateAnnotatedCount() {
+  const c = Object.keys(State.annotations).length;
+  document.getElementById('cnt-annotated').textContent = c;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 20: SESSION PERSISTENCE
+// ═══════════════════════════════════════════════════════════
+
+function saveToLocalStorage() {
+  try {
+    const session = {
+      hosts: State.hosts,
+      scans: State.scans,
+      annotations: State.annotations,
+      groups: State.groups,
+      timestamp: new Date().toISOString(),
+    };
+    localStorage.setItem(CONSTANTS.LS_KEY_SESSION, JSON.stringify(session));
+  } catch (e) { console.warn('localStorage save failed:', e.message); }
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(CONSTANTS.LS_KEY_SESSION);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+
+function clearLocalStorage() {
+  try { localStorage.removeItem(CONSTANTS.LS_KEY_SESSION); } catch (e) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 24: INITIALIZATION
+// ═══════════════════════════════════════════════════════════
+
+(function restoreFromLocalStorage() {
+  const saved = loadFromLocalStorage();
+  if (saved) {
+    if (saved.annotations) State.annotations = saved.annotations;
+    if (saved.groups) State.groups = saved.groups;
+  }
+})();
+
+function resumeSession() {
+  const saved = loadFromLocalStorage();
+  if (!saved) return;
+  State.hosts = saved.hosts || [];
+  State.scans = saved.scans || [];
+  State.annotations = saved.annotations || {};
+  State.groups = saved.groups || {};
+  State.serviceMap = {};
+  State.hosts.forEach(function(h) {
+    (h.tags || []).forEach(function(t) {
+      State.serviceMap[t] = (State.serviceMap[t] || 0) + 1;
+    });
+  });
+  buildDashboard();
+  document.getElementById('uploadScreen').style.display = 'none';
+  document.getElementById('dashboardScreen').style.display = 'block';
+}
+
+(function checkSavedSession() {
+  const saved = loadFromLocalStorage();
+  if (saved && saved.hosts && saved.hosts.length) {
+    var resumeBar = document.createElement('div');
+    resumeBar.className = 'session-resume';
+    resumeBar.innerHTML = '<span>Previous session found (' + saved.hosts.length + ' hosts, ' +
+      new Date(saved.timestamp).toLocaleString() + ')</span>' +
+      '<button onclick="resumeSession()" class="hdr-btn hdr-btn-accent">Resume</button>' +
+      '<button onclick="this.parentElement.remove()" class="hdr-btn hdr-btn-danger" style="background:transparent;border-color:var(--border)">New Scan</button>';
+    document.getElementById('uploadScreen').prepend(resumeBar);
+  }
+})();
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 19: HOST GROUPING
+// ═══════════════════════════════════════════════════════════
+
+function createGroupPrompt() {
+  var name = prompt('Group name:');
+  if (!name || !name.trim()) return;
+  var colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#9b59b6', '#e67e22'];
+  var color = colors[Object.keys(State.groups).length % colors.length];
+  State.groups[name.trim()] = { name: name.trim(), color: color };
+  buildGroupFilters();
+  saveToLocalStorage();
+}
+
+function buildGroupFilters() {
+  var container = document.getElementById('groupFilters');
+  var section = document.getElementById('groupSection');
+  if (!container || !section) return;
+  if (!Object.keys(State.groups).length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  container.innerHTML = Object.entries(State.groups).map(function(entry) {
+    var name = entry[0];
+    var g = entry[1];
+    var count = State.hosts.filter(function(h) { return h.group === name; }).length;
+    return '<button class="filter-btn" onclick="filterHosts(\'group:' + escHtml(name) + '\', this)">' +
+      '<span style="color:' + g.color + '">&#9679;</span> ' + escHtml(name) + ' <span class="filter-count">' + count + '</span></button>';
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 16: TIMELINE
+// ═══════════════════════════════════════════════════════════
+
+function buildTimeline() {
+  var container = document.getElementById('timelineContainer');
+  if (!container) return;
+  if (State.scans.length < 2) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">Timeline requires 2+ scans. Load additional scans via "+ Add Scan".</div>';
+    return;
+  }
+
+  var html = '<div style="position:relative"><div class="timeline-line"></div><div class="timeline-bar">';
+  State.scans.forEach(function(scan, idx) {
+    html += '<div class="timeline-point" onclick="selectTimelinePoint(' + idx + ')">' +
+      '<div class="timeline-dot' + (idx === State.scans.length - 1 ? ' active' : '') + '" id="tlDot' + idx + '"></div>' +
+      '<div class="timeline-label">' + escHtml(scan.filename || 'Scan ' + (idx + 1)) + '</div>' +
+      '<div class="timeline-date">' + escHtml(scan.startstr || '') + '</div>' +
+      '</div>';
+  });
+  html += '</div></div><div id="timelineSummary" class="timeline-summary"></div>';
+  container.innerHTML = html;
+
+  // Show last scan vs previous by default
+  selectTimelinePoint(State.scans.length - 1);
+}
+
+function selectTimelinePoint(idx) {
+  // Highlight active dot
+  document.querySelectorAll('.timeline-dot').forEach(function(d) { d.classList.remove('active'); });
+  var dot = document.getElementById('tlDot' + idx);
+  if (dot) dot.classList.add('active');
+
+  var summaryDiv = document.getElementById('timelineSummary');
+  if (!summaryDiv) return;
+
+  if (idx === 0) {
+    // First scan — show baseline info
+    var scan = State.scans[0];
+    var hostCount = State.hosts.filter(function(h) { return h.sources.some(function(s) { return s.filename === scan.filename; }); }).length;
+    summaryDiv.innerHTML = '<div class="timeline-stat-card" style="grid-column:1/-1"><h3>Baseline Scan</h3>' +
+      '<div style="font-size:14px;color:var(--text)">' + escHtml(scan.filename) + '</div>' +
+      '<div style="margin-top:8px;color:var(--text2)">' + hostCount + ' hosts discovered</div></div>';
+    return;
+  }
+
+  var prevScan = State.scans[idx - 1];
+  var currScan = State.scans[idx];
+
+  // Build per-scan host snapshots
+  var prevHosts = {};
+  var currHosts = {};
+  State.hosts.forEach(function(h) {
+    if (h.sources.some(function(s) { return s.filename === prevScan.filename; })) {
+      prevHosts[h.ip] = h;
+    }
+    if (h.sources.some(function(s) { return s.filename === currScan.filename; })) {
+      currHosts[h.ip] = h;
+    }
+  });
+
+  var prevIPs = Object.keys(prevHosts);
+  var currIPs = Object.keys(currHosts);
+  var newHosts = currIPs.filter(function(ip) { return !prevHosts[ip]; });
+  var removedHosts = prevIPs.filter(function(ip) { return !currHosts[ip]; });
+
+  var portChanges = [];
+  currIPs.forEach(function(ip) {
+    if (!prevHosts[ip]) return;
+    var prevPorts = prevHosts[ip].ports.filter(function(p) { return p.state === 'open'; }).map(function(p) { return p.port; });
+    var currPorts = currHosts[ip].ports.filter(function(p) { return p.state === 'open'; }).map(function(p) { return p.port; });
+    var newP = currPorts.filter(function(p) { return prevPorts.indexOf(p) === -1; });
+    var closedP = prevPorts.filter(function(p) { return currPorts.indexOf(p) === -1; });
+    if (newP.length || closedP.length) portChanges.push({ ip: ip, newPorts: newP, closedPorts: closedP });
+  });
+
+  var html = '<div class="timeline-stat-card"><h3>Host Delta</h3>' +
+    '<div class="timeline-delta positive">+' + newHosts.length + ' new hosts</div>' +
+    '<div class="timeline-delta negative">-' + removedHosts.length + ' removed hosts</div>' +
+    '<div style="margin-top:8px;font-size:11px;color:var(--text3)">' + escHtml(prevScan.filename) + ' -> ' + escHtml(currScan.filename) + '</div></div>';
+
+  html += '<div class="timeline-stat-card"><h3>Port Changes</h3>' +
+    '<div style="color:var(--text)">' + portChanges.length + ' hosts with port changes</div>';
+  portChanges.slice(0, 5).forEach(function(pc) {
+    html += '<div style="font-family:var(--mono);font-size:11px;margin-top:4px">' + escHtml(pc.ip) + ': ';
+    if (pc.newPorts.length) html += '<span style="color:var(--accent2)">+' + pc.newPorts.join(',+') + '</span> ';
+    if (pc.closedPorts.length) html += '<span style="color:var(--danger)">-' + pc.closedPorts.join(',-') + '</span>';
+    html += '</div>';
+  });
+  if (portChanges.length > 5) html += '<div style="font-size:10px;color:var(--text3);margin-top:4px">...and ' + (portChanges.length - 5) + ' more</div>';
+  html += '</div>';
+
+  if (newHosts.length) {
+    html += '<div class="timeline-stat-card"><h3>New Hosts</h3>';
+    newHosts.slice(0, 8).forEach(function(ip) {
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--accent2);cursor:pointer" onclick="jumpToHost(\'' + escHtml(ip) + '\')">' + escHtml(ip) + '</div>';
+    });
+    html += '</div>';
+  }
+
+  if (removedHosts.length) {
+    html += '<div class="timeline-stat-card"><h3>Removed Hosts</h3>';
+    removedHosts.slice(0, 8).forEach(function(ip) {
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--danger)">' + escHtml(ip) + '</div>';
+    });
+    html += '</div>';
+  }
+
+  summaryDiv.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 13: SUBNET VIEW
+// ═══════════════════════════════════════════════════════════
+
+function buildSubnetView_() {
+  const subnets = {};
+  State.hosts.forEach(h => { if(!subnets[h.subnet]) subnets[h.subnet]=[]; subnets[h.subnet].push(h); });
+
+  const portCounts = {};
+  State.hosts.forEach(h => h.ports.forEach(p => { if(p.state==='open') portCounts[p.port] = (portCounts[p.port]||0)+1; }));
+  const portMax = Math.max(1, ...Object.values(portCounts));
+
+  const tagCounts = {};
+  State.hosts.forEach(h => h.tags.forEach(t => tagCounts[t]=(tagCounts[t]||0)+1));
+  const tagMax = Math.max(1, ...Object.values(tagCounts));
+
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+    <div class="risk-card">
+      <h3>Service Distribution</h3>
+      ${Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([tag,count]) => {
+        const cfg = TAG_CONFIG[tag] || {color:'#2d6491', label:tag};
+        return `<div class="chart-bar-row">
+          <span class="chart-bar-label">${escHtml(cfg.label)}</span>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill" style="width:${Math.round(count/tagMax*100)}%;background:${cfg.color}">${count}</div>
+          </div></div>`;
+      }).join('')}
+    </div>
+    <div class="risk-card">
+      <h3>Port Distribution</h3>
+      ${Object.entries(portCounts).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([port,count]) => {
+        const info = PORT_SERVICE_MAP[port] || {color:'#2d6491', label:''};
+        return `<div class="chart-bar-row">
+          <span class="chart-bar-label">:${escHtml(port)} ${escHtml(info.label)}</span>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill" style="width:${Math.round(count/portMax*100)}%;background:${info.color||'#2d6491'}">${count}</div>
+          </div></div>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  Object.entries(subnets).sort().forEach(([subnet, hosts]) => {
+    const openH = hosts.filter(h => h.ports.some(p=>p.state==='open'));
+    const tags = [...new Set(hosts.flatMap(h=>h.tags))].slice(0,6);
+    html += `<div class="subnet-block">
+      <div class="subnet-header">
+        <div class="subnet-name">${escHtml(subnet)}</div>
+        <div class="subnet-count">${hosts.length} hosts · ${openH.length} open</div>
+        ${tags.map(t => { const c=TAG_CONFIG[t]||TAG_CONFIG.misc; return `<span class="service-tag" style="color:${c.color};border-color:${c.color}44;background:${c.color}11">${c.icon} ${escHtml(c.label)}</span>`; }).join('')}
+      </div>
+      <div class="subnet-bar">
+        ${hosts.sort((a,b)=>ipToNum(a.ip)-ipToNum(b.ip)).map(h => {
+          const tag = h.tags[0];
+          const cfg = tag ? (TAG_CONFIG[tag]||TAG_CONFIG.misc) : null;
+          const color = cfg ? cfg.color : '#2d6491';
+          const bg = h.ports.some(p=>p.state==='open') ? color+'22' : '#0a1520';
+          const border = h.ports.some(p=>p.state==='open') ? color+'88' : '#0e2640';
+          const lastOctets = h.ip.split('.').slice(2).join('.');
+          const title = escHtml(h.hostname + '\n' + (h.ports.filter(p=>p.state==='open').map(p=>p.port+'/'+p.service).join(', ')||'filtered'));
+          const riskMark = h.riskLevel==='critical'?'🔴':h.riskLevel==='high'?'🟠':'';
+          return `<span class="subnet-host-chip" style="color:${color};background:${bg};border-color:${border}" title="${title}" onclick="jumpToHost('${escHtml(h.ip)}')">${riskMark}${escHtml(lastOctets)}${h.ports.some(p=>p.state==='open') ? ' '+(cfg?cfg.icon:'🔓') : ''}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('subnetContainer').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 15: RISK INTEL
+// ═══════════════════════════════════════════════════════════
+
+function buildRiskView_() {
+  const critical = [], high = [], medium = [], info = [];
+
+  State.hosts.forEach(h => {
+    const openPorts = h.ports.filter(p => p.state === 'open');
+    const portNums = openPorts.map(p => p.port);
+    const cn = (h.ssl_cn||'').toLowerCase();
+    const scripts = JSON.stringify(h.scripts||{}).toLowerCase();
+    const combined = cn + ' ' + scripts + ' ' + openPorts.map(p=>p.service+(p.version||'')).join(' ').toLowerCase();
+
+    if (portNums.includes(3389)) critical.push({ icon:'🖥️', host:h.ip, text:`<strong>RDP Exposed (${escHtml(h.ip)})</strong> — Remote Desktop Protocol on port 3389 directly reachable. High risk for brute-force and BlueKeep-class exploits.` });
+    if (portNums.includes(445))  critical.push({ icon:'🪟', host:h.ip, text:`<strong>SMB Exposed (${escHtml(h.ip)})</strong> — Port 445 open. Risk: lateral movement, ransomware propagation, EternalBlue.` });
+    if (portNums.includes(23))   critical.push({ icon:'📟', host:h.ip, text:`<strong>Telnet Open (${escHtml(h.ip)})</strong> — Port 23 transmits credentials in plaintext. Severe risk.` });
+    if (portNums.includes(21) && !combined.includes('ftps')) critical.push({ icon:'📂', host:h.ip, text:`<strong>FTP Plaintext (${escHtml(h.ip)})</strong> — Port 21 open without TLS. Credentials and data exposed.` });
+    if (portNums.some(p=>[3306,5432,1433,27017,6379,1521].includes(p))) {
+      const dbPort = portNums.find(p=>[3306,5432,1433,27017,6379,1521].includes(p));
+      const dbInfo = PORT_SERVICE_MAP[dbPort] || {label:'Database'};
+      critical.push({ icon:'🗄️', host:h.ip, text:`<strong>${escHtml(dbInfo.label)} Exposed (${escHtml(h.ip)}:${dbPort})</strong> — Database port directly reachable. Risk: unauthenticated access, data exfiltration.` });
+    }
+    if (/\b(payment[_-]?gateway|netvalve|hpp-api|checkout[_-]?api|pay\.(com|net|io))\b/.test(combined)) {
+      critical.push({ icon:'💳', host:h.ip, text:`<strong>Payment Infrastructure (${escHtml(h.ip)})</strong> — Payment API endpoint detected. Direct internal exposure is a critical PCI-DSS concern.` });
+    }
+
+    if (portNums.includes(5900)) high.push({ icon:'🖥️', host:h.ip, text:`<strong>VNC Exposed (${escHtml(h.ip)})</strong> — Port 5900 open. VNC provides full desktop access; weak auth is common.` });
+    if (portNums.includes(2049)) high.push({ icon:'📁', host:h.ip, text:`<strong>NFS Server (${escHtml(h.ip)})</strong> — Port 2049 open. If not export-restricted, remote file system mounts possible.` });
+    if (portNums.includes(111))  high.push({ icon:'🔌', host:h.ip, text:`<strong>RPC Portmapper (${escHtml(h.ip)})</strong> — Port 111 exposed. Can enumerate all RPC services on host.` });
+    if (portNums.includes(139))  high.push({ icon:'🪟', host:h.ip, text:`<strong>NetBIOS (${escHtml(h.ip)})</strong> — Port 139 open. Legacy protocol susceptible to NBNS poisoning and information disclosure.` });
+    if (combined.includes('openvpn') || combined.includes('access server')) high.push({ icon:'🔒', host:h.ip, text:`<strong>OpenVPN-AS (${escHtml(h.ip)})</strong> — VPN admin portal exposed. Compromise grants network-wide access.` });
+    if (combined.includes('nessus') || combined.includes('nessuswww')) high.push({ icon:'🔍', host:h.ip, text:`<strong>Nessus Scanner (${escHtml(h.ip)})</strong> — Vulnerability scanner web UI exposed. Contains full scan data and credentials.` });
+    if (portNums.includes(9200) || portNums.includes(9300)) high.push({ icon:'🔎', host:h.ip, text:`<strong>Elasticsearch (${escHtml(h.ip)})</strong> — Unauthenticated Elasticsearch can expose all indexed data.` });
+    if (portNums.includes(6379)) high.push({ icon:'🗄️', host:h.ip, text:`<strong>Redis (${escHtml(h.ip)})</strong> — Default Redis has no authentication. SSRF to Redis can enable RCE.` });
+    if (portNums.includes(27017)) high.push({ icon:'🗄️', host:h.ip, text:`<strong>MongoDB (${escHtml(h.ip)})</strong> — Port 27017 open. Frequently misconfigured with no auth.` });
+    if (portNums.includes(5985) || portNums.includes(5986)) high.push({ icon:'🪟', host:h.ip, text:`<strong>WinRM (${escHtml(h.ip)})</strong> — Windows Remote Management exposed. PowerShell remoting risk if credentials obtained.` });
+
+    if (portNums.includes(22)) {
+      const sshInfo = openPorts.find(p=>p.port===22);
+      medium.push({ icon:'💻', host:h.ip, text:`<strong>SSH (${escHtml(h.ip)})</strong> — ${escHtml(sshInfo?.version||'')}. Ensure key-based auth only; check for weak ciphers.` });
+    }
+    if (portNums.includes(25) || portNums.includes(587)) medium.push({ icon:'✉️', host:h.ip, text:`<strong>SMTP (${escHtml(h.ip)})</strong> — Mail port exposed. Risk: open relay, credential exposure, phishing origin.` });
+    if (portNums.includes(389)) medium.push({ icon:'📒', host:h.ip, text:`<strong>LDAP (${escHtml(h.ip)})</strong> — Port 389 (plaintext). Anonymous bind may expose directory structure.` });
+    if (portNums.includes(6443)) medium.push({ icon:'⚙️', host:h.ip, text:`<strong>Kubernetes API (${escHtml(h.ip)})</strong> — Port 6443 open. Exposed K8s API server could allow cluster takeover with misconfigured RBAC.` });
+
+    // SSL expiry
+    if (h.ssl_exp) {
+      const exp = new Date(h.ssl_exp);
+      const daysLeft = (exp - new Date()) / 86400000;
+      if (daysLeft < 0) critical.push({ icon:'🔐', host:h.ip, text:`<strong>Expired SSL Certificate (${escHtml(h.ip)})</strong> — Certificate for ${escHtml(h.ssl_cn||'?')} expired on ${escHtml(h.ssl_exp)}. Clients will see certificate errors.` });
+      else if (daysLeft < 30) medium.push({ icon:'🔐', host:h.ip, text:`<strong>SSL Expiring Soon (${escHtml(h.ip)})</strong> — Certificate for ${escHtml(h.ssl_cn||'?')} expires ${escHtml(h.ssl_exp)} (${Math.floor(daysLeft)}d remaining).` });
+    }
+
+    if (combined.includes('ecr') || combined.includes('dkr.ecr')) info.push({ icon:'📦', host:h.ip, text:`<strong>ECR Endpoint (${escHtml(h.ip)})</strong> — Container registry endpoint. Verify registry access controls.` });
+    if (combined.includes('secretsmanager')) info.push({ icon:'🔐', host:h.ip, text:`<strong>Secrets Manager VPC Endpoint (${escHtml(h.ip)})</strong> — Ensure IAM policies restrict access appropriately.` });
+    if (combined.includes('s3.') || combined.includes('amazons3')) info.push({ icon:'🪣', host:h.ip, text:`<strong>S3 VPC Endpoint (${escHtml(h.ip)})</strong> — Verify bucket policies and block public access settings.` });
+    if (cn.includes('ecs')) info.push({ icon:'🐳', host:h.ip, text:`<strong>ECS Endpoint (${escHtml(h.ip)})</strong> — Ensure task role permissions follow least-privilege.` });
+  });
+
+  const subnets = [...new Set(State.hosts.map(h=>h.subnet))];
+  const unusualSubnets = subnets.filter(s => !s.startsWith('10.') && !s.startsWith('192.168.') && !s.startsWith('172.16.') && !s.startsWith('172.31.'));
+
+  let html = `<div class="risk-grid">`;
+
+  const sections = [
+    { label:'Critical Findings', badge:'risk-critical', badge_text:'CRITICAL', items: critical },
+    { label:'High Severity',     badge:'risk-high',     badge_text:'HIGH',     items: high },
+    { label:'Medium Severity',   badge:'risk-medium',   badge_text:'MEDIUM',   items: medium },
+    { label:'Info / Notable',    badge:'risk-info',     badge_text:'INFO',     items: info },
+  ];
+
+  sections.forEach(sec => {
+    if (!sec.items.length) return;
+    html += `<div class="risk-card">
+      <h3>🔎 ${sec.label} <span class="risk-badge ${sec.badge}">${sec.badge_text} · ${sec.items.length}</span></h3>
+      ${sec.items.slice(0,10).map(f => `<div class="finding-item" onclick="jumpToHost('${escHtml(f.host)}')"><div class="finding-icon">${f.icon}</div><div class="finding-text">${f.text}</div></div>`).join('')}
+      ${sec.items.length > 10 ? `<div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:6px 0">…and ${sec.items.length-10} more findings</div>` : ''}
+    </div>`;
+  });
+
+  if (!critical.length && !high.length && !medium.length) {
+    html += `<div class="risk-card" style="grid-column:1/-1"><h3>✅ No High-Risk Findings</h3>
+      <div class="finding-item"><div class="finding-icon">✅</div><div class="finding-text">No critical or high-severity exposures automatically detected. Manual review recommended.</div></div>
+    </div>`;
+  }
+
+  const portDist = {};
+  State.hosts.forEach(h=>h.ports.forEach(p=>{ if(p.state==='open') portDist[p.port]=(portDist[p.port]||0)+1; }));
+  const topPort = Object.entries(portDist).sort((a,b)=>b[1]-a[1])[0];
+
+  html += `<div class="risk-card">
+    <h3>🗺️ Topology Summary <span class="risk-badge risk-info">RECON</span></h3>
+    <div class="finding-item"><div class="finding-icon">🏗️</div><div class="finding-text"><strong>${subnets.length} Subnets</strong> — ${escHtml(subnets.sort().join(', ').slice(0,120))}${subnets.join(',').length>120?'…':''}</div></div>
+    <div class="finding-item"><div class="finding-icon">📊</div><div class="finding-text"><strong>Hosts:</strong> ${State.hosts.length} scanned, ${State.hosts.filter(h=>h.ports.some(p=>p.state==='open')).length} open, ${State.hosts.filter(h=>!h.ports.some(p=>p.state==='open')).length} filtered.</div></div>
+    ${topPort ? `<div class="finding-item"><div class="finding-icon">🔝</div><div class="finding-text"><strong>Most Common Port:</strong> ${topPort[0]} (${escHtml(PORT_SERVICE_MAP[topPort[0]]?.label||'Unknown')}) — ${topPort[1]} hosts.</div></div>` : ''}
+    ${unusualSubnets.length ? `<div class="finding-item"><div class="finding-icon">⚠️</div><div class="finding-text"><strong>Non-RFC1918:</strong> ${escHtml(unusualSubnets.join(', '))} — public IPs in scope.</div></div>` : ''}
+    <div class="finding-item"><div class="finding-icon">⏱️</div><div class="finding-text"><strong>Scan Command:</strong> <code style="font-family:var(--mono);font-size:10px;color:var(--accent2)">${escHtml((getCurrentScan().args||'').slice(0,100))}</code></div></div>
+  </div></div>`;
+
+  document.getElementById('riskContainer').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 17: DIFF / COMPARE
+// ═══════════════════════════════════════════════════════════
+
+function parseHostsFromXML(xmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, 'application/xml');
+  const hosts = {};
+  doc.querySelectorAll('host').forEach(hostEl => {
+    const addrEl = hostEl.querySelector('address[addrtype="ipv4"], address[addrtype="ipv6"]');
+    if (!addrEl) return;
+    const ip = addrEl.getAttribute('addr');
+    const portsEl = hostEl.querySelector('ports');
+    const ports = {};
+    if (portsEl) {
+      portsEl.querySelectorAll(':scope > port').forEach(portEl => {
+        const stateEl = portEl.querySelector('state');
+        const pState = stateEl ? stateEl.getAttribute('state') : 'unknown';
+        const portNum = portEl.getAttribute('portid');
+        const proto = portEl.getAttribute('protocol') || 'tcp';
+        const serviceEl = portEl.querySelector('service');
+        const svc = serviceEl ? (serviceEl.getAttribute('name') || '') : '';
+        ports[portNum] = { state: pState, service: svc, proto };
+      });
+    }
+    hosts[ip] = ports;
+  });
+  return hosts;
+}
+
+function runDiff(xmlText, filename) {
+  // Build base host map with port state info
+  const oldHosts = {};
+  State.hosts.forEach(h => {
+    oldHosts[h.ip] = {};
+    h.ports.forEach(p => {
+      oldHosts[h.ip][p.port] = { state: p.state, service: p.service, proto: p.proto };
+    });
+  });
+  const newHosts = parseHostsFromXML(xmlText);
+
+  const allIPs = new Set([...Object.keys(oldHosts), ...Object.keys(newHosts)]);
+  const added = [], removed = [], changed = [];
+
+  allIPs.forEach(ip => {
+    const inOld = ip in oldHosts;
+    const inNew = ip in newHosts;
+    if (!inOld) { added.push(ip); return; }
+    if (!inNew) { removed.push(ip); return; }
+    const o = oldHosts[ip], n = newHosts[ip];
+    const portChanges = [];
+    const allPorts = new Set([...Object.keys(o), ...Object.keys(n)]);
+    allPorts.forEach(p => {
+      const inO = p in o, inN = p in n;
+      if (!inO && inN) {
+        portChanges.push({ port: p, type: 'new', svc: n[p].service, proto: n[p].proto, state: n[p].state });
+      } else if (inO && !inN) {
+        portChanges.push({ port: p, type: 'closed', svc: o[p].service, proto: o[p].proto, state: o[p].state });
+      } else if (inO && inN && o[p].state !== n[p].state) {
+        portChanges.push({ port: p, type: 'state-change', proto: n[p].proto || o[p].proto, oldState: o[p].state, newState: n[p].state, svc: n[p].service });
+      }
+    });
+    if (portChanges.length) changed.push({ ip, changes: portChanges });
+  });
+
+  const label = `Comparing <span style="color:var(--accent2)">${escHtml(getCurrentScan().filename)}</span> (baseline) vs <span style="color:var(--warn)">${escHtml(filename)}</span>`;
+  renderDiffResults(added, removed, changed, oldHosts, newHosts, label);
+  const uploadZone = document.querySelector('.diff-upload-zone');
+  if (uploadZone) uploadZone.style.display = 'none';
+}
+
+function renderDiffResults(added, removed, changed, oldHosts, newHosts, label) {
+  let html = `<div style="font-family:var(--mono);font-size:11px;color:var(--text3);margin-bottom:16px">${label}</div>`;
+
+  if (added.length) {
+    html += `<div class="diff-section"><div class="diff-header" style="color:var(--accent2)">✨ New Hosts (${added.length})</div>`;
+    added.forEach(ip => {
+      const hostPorts = newHosts[ip] || {};
+      const ports = Object.entries(hostPorts).map(([p,info])=>`${p}/${info.service||'?'}`).join(', ');
+      html += `<div class="diff-row diff-new">
+        <div class="diff-ip">${escHtml(ip)}</div>
+        <span class="diff-badge risk-info">NEW</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${escHtml(ports||'no open ports')}</span>
+        <button class="search-btn" style="margin-left:auto;padding:3px 8px;font-size:10px" onclick="jumpToHost('${escHtml(ip)}')">→ Card</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (removed.length) {
+    html += `<div class="diff-section"><div class="diff-header" style="color:var(--danger)">💀 Vanished Hosts (${removed.length})</div>`;
+    removed.forEach(ip => {
+      const hostPorts = oldHosts[ip] || {};
+      const ports = Object.entries(hostPorts).map(([p,info])=>`${p}/${info.service||'?'}`).join(', ');
+      html += `<div class="diff-row diff-gone">
+        <div class="diff-ip">${escHtml(ip)}</div>
+        <span class="diff-badge risk-critical">GONE</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">was: ${escHtml(ports||'no open ports')}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (changed.length) {
+    html += `<div class="diff-section"><div class="diff-header" style="color:var(--warn)">⚡ Changed Hosts (${changed.length})</div>`;
+    changed.forEach(({ ip, changes }) => {
+      const newP = changes.filter(c=>c.type==='new').map(c=>`+${c.port}/${c.svc||'?'}`);
+      const closedP = changes.filter(c=>c.type==='closed').map(c=>`-${c.port}/${c.svc||'?'}`);
+      const stateP = changes.filter(c=>c.type==='state-change').map(c=>`${c.port}/${c.proto}: ${c.oldState} → ${c.newState}`);
+      html += `<div class="diff-row diff-changed">
+        <div class="diff-ip">${escHtml(ip)}</div>
+        <span class="diff-badge risk-high">CHANGED</span>
+        <span style="font-family:var(--mono);font-size:10px">
+          ${newP.map(p=>`<span style="color:var(--accent2)">${escHtml(p)}</span>`).join(' ')}
+          ${closedP.map(p=>`<span style="color:var(--danger)">${escHtml(p)}</span>`).join(' ')}
+          ${stateP.map(p=>`<span class="diff-state">${escHtml(p)}</span>`).join(' ')}
+        </span>
+        <button class="search-btn" style="margin-left:auto;padding:3px 8px;font-size:10px" onclick="jumpToHost('${escHtml(ip)}')">→ Card</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (!added.length && !removed.length && !changed.length) {
+    html += `<div style="text-align:center;padding:40px;font-family:var(--mono);color:var(--accent2)">✅ No differences found — scans are identical</div>`;
+  }
+
+  document.getElementById('diffResults').style.display = 'block';
+  document.getElementById('diffResults').innerHTML = html;
+}
+
+function buildDiffView() {
+  const container = document.getElementById('diffContainer');
+  if (!container) return;
+  if (State.scans.length < 2) {
+    // Keep existing single-file diff upload UI
+    const uploadZone = container.querySelector('.diff-upload-zone');
+    if (uploadZone) uploadZone.style.display = '';
+    document.getElementById('diffResults').style.display = 'none';
+    document.getElementById('diffResults').innerHTML = '';
+    return;
+  }
+  // Multi-scan mode: show scan selector dropdowns
+  container.innerHTML =
+    '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">' +
+      '<label style="font-family:var(--mono);font-size:11px;color:var(--text3)">Baseline: ' +
+        '<select id="diffBaseline" style="background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px">' +
+        State.scans.map((s, i) => '<option value="' + i + '">' + escHtml(s.filename) + '</option>').join('') +
+        '</select>' +
+      '</label>' +
+      '<label style="font-family:var(--mono);font-size:11px;color:var(--text3)">Compare: ' +
+        '<select id="diffCompare" style="background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px">' +
+        State.scans.map((s, i) => '<option value="' + i + '"' + (i === 1 ? ' selected' : '') + '>' + escHtml(s.filename) + '</option>').join('') +
+        '</select>' +
+      '</label>' +
+      '<button class="hdr-btn hdr-btn-accent" onclick="runScanDiff()">Compare</button>' +
+    '</div>' +
+    '<div id="diffResults"></div>';
+}
+
+function runScanDiff() {
+  const baseIdx = +document.getElementById('diffBaseline').value;
+  const compIdx = +document.getElementById('diffCompare').value;
+  if (baseIdx === compIdx) { alert('Select two different scans'); return; }
+  const baseScan = State.scans[baseIdx];
+  const compScan = State.scans[compIdx];
+
+  // Build per-scan host snapshots from merged State.hosts
+  const oldHosts = {};
+  const newHosts = {};
+  State.hosts.forEach(h => {
+    const inBase = h.sources.some(s => s.filename === baseScan.filename);
+    const inComp = h.sources.some(s => s.filename === compScan.filename);
+    if (inBase) {
+      oldHosts[h.ip] = {};
+      h.ports.filter(p => p.source === baseScan.filename || !p.source).forEach(p => {
+        oldHosts[h.ip][p.port] = { state: p.state, service: p.service, proto: p.proto };
+      });
+      // If no ports have source tags, include all ports for this host
+      if (Object.keys(oldHosts[h.ip]).length === 0) {
+        h.ports.forEach(p => {
+          oldHosts[h.ip][p.port] = { state: p.state, service: p.service, proto: p.proto };
+        });
+      }
+    }
+    if (inComp) {
+      newHosts[h.ip] = {};
+      h.ports.filter(p => p.source === compScan.filename || !p.source).forEach(p => {
+        newHosts[h.ip][p.port] = { state: p.state, service: p.service, proto: p.proto };
+      });
+      if (Object.keys(newHosts[h.ip]).length === 0) {
+        h.ports.forEach(p => {
+          newHosts[h.ip][p.port] = { state: p.state, service: p.service, proto: p.proto };
+        });
+      }
+    }
+  });
+
+  const allIPs = new Set([...Object.keys(oldHosts), ...Object.keys(newHosts)]);
+  const added = [], removed = [], changed = [];
+
+  allIPs.forEach(ip => {
+    const inOld = ip in oldHosts;
+    const inNew = ip in newHosts;
+    if (!inOld) { added.push(ip); return; }
+    if (!inNew) { removed.push(ip); return; }
+    const o = oldHosts[ip], n = newHosts[ip];
+    const portChanges = [];
+    const allPorts = new Set([...Object.keys(o), ...Object.keys(n)]);
+    allPorts.forEach(p => {
+      const inO = p in o, inN = p in n;
+      if (!inO && inN) {
+        portChanges.push({ port: p, type: 'new', svc: n[p].service, proto: n[p].proto, state: n[p].state });
+      } else if (inO && !inN) {
+        portChanges.push({ port: p, type: 'closed', svc: o[p].service, proto: o[p].proto, state: o[p].state });
+      } else if (inO && inN && o[p].state !== n[p].state) {
+        portChanges.push({ port: p, type: 'state-change', proto: n[p].proto || o[p].proto, oldState: o[p].state, newState: n[p].state, svc: n[p].service });
+      }
+    });
+    if (portChanges.length) changed.push({ ip, changes: portChanges });
+  });
+
+  const label = 'Comparing <span style="color:var(--accent2)">' + escHtml(baseScan.filename) + '</span> (baseline) vs <span style="color:var(--warn)">' + escHtml(compScan.filename) + '</span>';
+  renderDiffResults(added, removed, changed, oldHosts, newHosts, label);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 18: NETWORK MAP
+// ═══════════════════════════════════════════════════════════
+
+function computeMapLayout() {
+  const hosts = State.hosts;
+  const subnets = getSubnets();
+  const subnetKeys = Object.keys(subnets);
+  const cx = State.mapW / 2, cy = State.mapH / 2;
+  const nodes = {};
+
+  // Place subnet cluster centers in a circle
+  const clusterRadius = Math.min(State.mapW, State.mapH) * 0.3;
+  subnetKeys.forEach((subnet, i) => {
+    const angle = (2 * Math.PI * i) / subnetKeys.length;
+    nodes['cluster:' + subnet] = {
+      x: cx + clusterRadius * Math.cos(angle),
+      y: cy + clusterRadius * Math.sin(angle),
+      isCluster: true, subnet: subnet, fixed: false
+    };
+  });
+
+  // Place hosts near their cluster center with deterministic jitter
+  for (const h of hosts) {
+    const cluster = nodes['cluster:' + h.subnet];
+    if (!cluster) continue;
+    const seed = ipToNum(h.ip);
+    const jx = ((seed * 9301 + 49297) % 233280) / 233280 - 0.5;
+    const jy = ((seed * 7901 + 31337) % 233280) / 233280 - 0.5;
+    const spread = 60 + Math.min(subnets[h.subnet].length * 2, 120);
+    nodes[h.ip] = {
+      x: cluster.x + jx * spread, y: cluster.y + jy * spread,
+      isCluster: false, subnet: h.subnet, host: h, vx: 0, vy: 0
+    };
+  }
+
+  // Run force simulation
+  const iterations = CONSTANTS.MAP_SETTLE_FRAMES;
+  for (let iter = 0; iter < iterations; iter++) {
+    const alpha = 1 - iter / iterations;
+    const nodeList = Object.values(nodes).filter(n => !n.isCluster);
+
+    // Repulsion between host nodes
+    for (let i = 0; i < nodeList.length; i++) {
+      for (let j = i + 1; j < nodeList.length; j++) {
+        const a = nodeList[i], b = nodeList[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.max(Math.hypot(dx, dy), 1);
+        const force = (500 * alpha) / (dist * dist);
+        const fx = (dx / dist) * force, fy = (dy / dist) * force;
+        a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
+      }
+    }
+
+    // Attraction to cluster center
+    for (const n of nodeList) {
+      const cluster = nodes['cluster:' + n.subnet];
+      if (!cluster) continue;
+      n.vx += (cluster.x - n.x) * 0.005 * alpha;
+      n.vy += (cluster.y - n.y) * 0.005 * alpha;
+    }
+
+    // Collision avoidance + velocity update
+    for (let i = 0; i < nodeList.length; i++) {
+      for (let j = i + 1; j < nodeList.length; j++) {
+        const a = nodeList[i], b = nodeList[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 12 && dist > 0) {
+          const overlap = (12 - dist) / 2;
+          const fx = (dx / dist) * overlap, fy = (dy / dist) * overlap;
+          a.x -= fx; a.y -= fy; b.x += fx; b.y += fy;
+        }
+      }
+    }
+    for (const n of nodeList) {
+      n.vx *= 0.9; n.vy *= 0.9;
+      n.x += n.vx; n.y += n.vy;
+    }
+  }
+
+  State.mapNodePos = nodes;
+}
+
+function drawMinimap(ctx, w, h) {
+  const mmW = 150, mmH = 100;
+  const mmX = w - mmW - 10, mmY = h - mmH - 10;
+  ctx.fillStyle = 'rgba(5,10,15,0.85)';
+  ctx.fillRect(mmX, mmY, mmW, mmH);
+  ctx.strokeStyle = '#0e2640'; ctx.lineWidth = 1;
+  ctx.strokeRect(mmX, mmY, mmW, mmH);
+
+  const allNodes = Object.values(State.mapNodePos).filter(n => !n.isCluster);
+  if (!allNodes.length) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of allNodes) { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); }
+  const worldW = maxX - minX + 100 || 1, worldH = maxY - minY + 100 || 1;
+  const scale = Math.min(mmW / worldW, mmH / worldH);
+
+  for (const n of allNodes) {
+    const nx = mmX + (n.x - minX + 50) * scale, ny = mmY + (n.y - minY + 50) * scale;
+    ctx.fillStyle = n.host?.riskLevel === 'critical' ? '#ff3355' : n.host?.riskLevel === 'high' ? '#ff9900' : '#00d4ff';
+    ctx.fillRect(nx - 1, ny - 1, 2, 2);
+  }
+
+  // Viewport rect
+  const vpX = mmX + (-State.mapOffX / State.mapScale - minX + 50) * scale;
+  const vpY = mmY + (-State.mapOffY / State.mapScale - minY + 50) * scale;
+  ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 1;
+  ctx.strokeRect(vpX, vpY, (w / State.mapScale) * scale, (h / State.mapScale) * scale);
+}
+
+function showMapInspector(ip) {
+  const host = getHostByIP(ip);
+  if (!host) return;
+  const openPorts = host.ports.filter(p => p.state === 'open');
+  let panel = document.getElementById('mapInspector');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'mapInspector';
+    panel.className = 'map-inspector';
+    document.getElementById('netmap').appendChild(panel);
+  }
+  panel.innerHTML = '<div class="map-inspector-header"><strong>' + escHtml(host.ip) + '</strong>' +
+    '<button onclick="this.parentElement.parentElement.style.display=\'none\'" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px">&times;</button></div>' +
+    (host.hostname ? '<div style="color:var(--text2);font-size:12px">' + escHtml(host.hostname) + '</div>' : '') +
+    '<div class="risk-badge risk-' + host.riskLevel + '" style="display:inline-block;margin:4px 0">' + host.riskLevel.toUpperCase() + '</div>' +
+    '<div style="font-size:11px;color:var(--text2);margin:8px 0">' + openPorts.length + ' open ports</div>' +
+    '<div style="font-size:11px;max-height:200px;overflow-y:auto">' +
+    openPorts.map(p => '<div style="padding:2px 0;color:var(--text);font-family:var(--mono)">' + p.port + '/' + p.proto + ' <span style="color:var(--text2)">' + escHtml(p.service) + '</span></div>').join('') + '</div>' +
+    '<button class="hdr-btn hdr-btn-accent" style="margin-top:8px;font-size:11px;width:100%" onclick="jumpToHost(\'' + escHtml(host.ip) + '\')">View Host Card</button>' +
+    '<button class="hdr-btn" style="margin-top:4px;font-size:11px;width:100%" onclick="openAnnModal(\'' + escHtml(host.ip) + '\',event)">Annotate</button>';
+  panel.style.display = 'block';
+}
+
+function zoomToFit() {
+  const allNodes = Object.values(State.mapNodePos).filter(n => !n.isCluster);
+  if (!allNodes.length) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of allNodes) { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); }
+  State.mapScale = Math.min(State.mapW / (maxX - minX + 100), State.mapH / (maxY - minY + 100), CONSTANTS.MAP_MAX_SCALE);
+  State.mapOffX = -minX * State.mapScale + 50 * State.mapScale;
+  State.mapOffY = -minY * State.mapScale + 50 * State.mapScale;
+  if (typeof _drawMapRef === 'function') _drawMapRef();
+}
+
+/** @type {Function|null} */ let _drawMapRef = null;
+
+function initNetworkMap() {
+  // Clean up previous listeners if re-initializing
+  if (State._mapAbortController) State._mapAbortController.abort();
+  State._mapAbortController = new AbortController();
+  const signal = State._mapAbortController.signal;
+  if (State._mapResizeObserver) State._mapResizeObserver.disconnect();
+
+  const container = document.getElementById('netmap');
+  State.mapCanvas = document.getElementById('mapCanvas');
+  State.mapW = container.clientWidth || 800;
+  State.mapH = Math.max(container.clientHeight, 480);
+  State.mapCanvas.width = State.mapW;
+  State.mapCanvas.height = State.mapH;
+  State.mapCtx = State.mapCanvas.getContext('2d');
+  State.mapInitialized = true;
+  State.mapScale = 1; State.mapOffX = 0; State.mapOffY = 0;
+  State._mapDragNode = null;
+
+  // Force-directed layout
+  computeMapLayout();
+
+  const subnets = getSubnets();
+
+  function screenToWorld(sx, sy) {
+    return { x: (sx - State.mapOffX) / State.mapScale, y: (sy - State.mapOffY) / State.mapScale };
+  }
+
+  function drawMap() {
+    const ctx = State.mapCtx;
+    const w = State.mapW, h = State.mapH;
+    ctx.clearRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(State.mapOffX, State.mapOffY);
+    ctx.scale(State.mapScale, State.mapScale);
+
+    // Viewport bounds in world space (for frustum culling)
+    const vpLeft = -State.mapOffX / State.mapScale;
+    const vpTop = -State.mapOffY / State.mapScale;
+    const vpRight = vpLeft + w / State.mapScale;
+    const vpBottom = vpTop + h / State.mapScale;
+    const margin = 80;
+
+    // Grid
+    const gs = CONSTANTS.MAP_GRID_SPACING;
+    ctx.strokeStyle = '#0a1a2a'; ctx.lineWidth = 1 / State.mapScale;
+    const gridLeft = Math.floor(vpLeft / gs) * gs;
+    const gridTop = Math.floor(vpTop / gs) * gs;
+    for (let x = gridLeft; x <= vpRight + gs; x += gs) { ctx.beginPath(); ctx.moveTo(x, vpTop); ctx.lineTo(x, vpBottom); ctx.stroke(); }
+    for (let y = gridTop; y <= vpBottom + gs; y += gs) { ctx.beginPath(); ctx.moveTo(vpLeft, y); ctx.lineTo(vpRight, y); ctx.stroke(); }
+
+    // Subnet cluster bubbles
+    const subnetKeys = Object.keys(subnets);
+    for (const sKey of subnetKeys) {
+      const clusterNode = State.mapNodePos['cluster:' + sKey];
+      if (!clusterNode) continue;
+      const subnetHosts = Object.values(State.mapNodePos).filter(n => !n.isCluster && n.subnet === sKey);
+      if (!subnetHosts.length) continue;
+
+      // Bounding circle
+      let sumX = 0, sumY = 0;
+      for (const n of subnetHosts) { sumX += n.x; sumY += n.y; }
+      const cX = sumX / subnetHosts.length, cY = sumY / subnetHosts.length;
+      let maxDist = 0;
+      for (const n of subnetHosts) { maxDist = Math.max(maxDist, Math.hypot(n.x - cX, n.y - cY)); }
+      const bubbleR = maxDist + 30;
+
+      // Frustum cull
+      if (cX + bubbleR < vpLeft - margin || cX - bubbleR > vpRight + margin || cY + bubbleR < vpTop - margin || cY - bubbleR > vpBottom + margin) continue;
+
+      ctx.fillStyle = 'rgba(10,30,50,0.3)';
+      ctx.beginPath(); ctx.arc(cX, cY, bubbleR, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#0e2640'; ctx.lineWidth = 1 / State.mapScale;
+      ctx.beginPath(); ctx.arc(cX, cY, bubbleR, 0, Math.PI * 2); ctx.stroke();
+
+      // Subnet label above bubble
+      ctx.fillStyle = '#6fa3c8'; ctx.font = (11 / State.mapScale) + 'px Share Tech Mono';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(sKey + ' (' + subnetHosts.length + ')', cX, cY - bubbleR - 4);
+    }
+
+    // Level-of-detail: if zoomed out too far, only show bubbles + labels
+    if (State.mapScale <= 0.5) {
+      // Cluster center markers only
+      for (const sKey of subnetKeys) {
+        const cn = State.mapNodePos['cluster:' + sKey];
+        if (!cn) continue;
+        ctx.fillStyle = '#0e2640';
+        ctx.beginPath(); ctx.arc(cn.x, cn.y, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1a3a5c'; ctx.lineWidth = 1 / State.mapScale;
+        ctx.beginPath(); ctx.arc(cn.x, cn.y, 8, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      drawMinimap(ctx, w, h);
+      return;
+    }
+
+    // Edges: from cluster center to each host in subnet
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      const host = pos.host;
+      if (!host) continue;
+      const cluster = State.mapNodePos['cluster:' + pos.subnet];
+      if (!cluster) continue;
+      const openPorts = host.ports.filter(p => p.state === 'open');
+      const openCount = openPorts.length;
+      const tag = host.tags[0] || 'misc';
+      const cfg = TAG_CONFIG[tag] || TAG_CONFIG.misc;
+      const edgeWidth = Math.min(openCount * 0.3 + 0.5, 3);
+      ctx.strokeStyle = cfg.color + '40';
+      ctx.lineWidth = edgeWidth / State.mapScale;
+      ctx.beginPath(); ctx.moveTo(cluster.x, cluster.y); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+    }
+
+    // Cluster center markers
+    for (const sKey of subnetKeys) {
+      const cn = State.mapNodePos['cluster:' + sKey];
+      if (!cn) continue;
+      if (cn.x < vpLeft - margin || cn.x > vpRight + margin || cn.y < vpTop - margin || cn.y > vpBottom + margin) continue;
+      ctx.fillStyle = '#0e2640';
+      ctx.beginPath(); ctx.arc(cn.x, cn.y, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1a3a5c'; ctx.lineWidth = 1 / State.mapScale;
+      ctx.beginPath(); ctx.arc(cn.x, cn.y, 8, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // Host nodes
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      const host = pos.host;
+      if (!host) continue;
+
+      // Frustum cull
+      if (pos.x < vpLeft - margin || pos.x > vpRight + margin || pos.y < vpTop - margin || pos.y > vpBottom + margin) continue;
+
+      const openPorts = host.ports.filter(p => p.state === 'open');
+      const openCount = openPorts.length;
+      const tag = host.tags[0] || 'misc';
+      const cfg = TAG_CONFIG[tag] || TAG_CONFIG.misc;
+
+      // Radius scaled by open port count
+      const r = Math.max(CONSTANTS.MAP_NODE_MIN_RADIUS, Math.min(CONSTANTS.MAP_NODE_MIN_RADIUS + openCount * 0.8, CONSTANTS.MAP_NODE_MAX_RADIUS));
+
+      // Fill = primary tag color
+      const fillColor = cfg.color;
+
+      // Border by risk
+      let borderColor, borderWidth;
+      if (host.riskLevel === 'critical') { borderColor = '#ff3355'; borderWidth = 2.5; }
+      else if (host.riskLevel === 'high') { borderColor = '#ff9900'; borderWidth = 2; }
+      else if (host.riskLevel === 'medium') { borderColor = '#ffcc00'; borderWidth = 1; }
+      else { borderColor = '#0e2640'; borderWidth = 1; }
+
+      const isHover = State.mapHoverNode === key;
+
+      // Hover glow
+      if (isHover) {
+        ctx.fillStyle = fillColor + '30';
+        ctx.beginPath(); ctx.arc(pos.x, pos.y, r + 10, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Node body
+      ctx.fillStyle = openCount > 0 ? fillColor + 'cc' : '#0d1d2e';
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2); ctx.fill();
+
+      // Border
+      ctx.strokeStyle = borderColor; ctx.lineWidth = borderWidth / State.mapScale;
+      ctx.beginPath(); ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2); ctx.stroke();
+
+      // Labels: last 2 octets when zoomed in or hovered
+      if (State.mapScale > 0.8 || isHover) {
+        ctx.fillStyle = isHover ? '#ffffff' : '#7a9dbb';
+        ctx.font = (9 / State.mapScale) + 'px Share Tech Mono';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(host.ip.split('.').slice(2).join('.'), pos.x, pos.y + r + 2);
+      }
+    }
+
+    ctx.restore();
+
+    // Minimap (drawn in screen space)
+    drawMinimap(ctx, w, h);
+  }
+
+  _drawMapRef = drawMap;
+  drawMap();
+
+  // ── Event Handlers ──
+
+  // mousedown: check node drag or start pan
+  State.mapCanvas.addEventListener('mousedown', e => {
+    const rect = State.mapCanvas.getBoundingClientRect();
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    // Check if clicking a node
+    let dragKey = null;
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      if (Math.hypot(world.x - pos.x, world.y - pos.y) < CONSTANTS.MAP_HOVER_THRESHOLD) { dragKey = key; break; }
+    }
+    if (dragKey) {
+      State._mapDragNode = dragKey;
+      State.mapCanvas.style.cursor = 'move';
+    } else {
+      State.mapIsPanning = true;
+      State.mapPanStart = { x: e.clientX - State.mapOffX, y: e.clientY - State.mapOffY };
+      State.mapCanvas.style.cursor = 'grabbing';
+    }
+  }, { signal });
+
+  // mouseup: end drag or pan
+  window.addEventListener('mouseup', () => {
+    State.mapIsPanning = false;
+    State._mapDragNode = null;
+    if (State.mapCanvas) State.mapCanvas.style.cursor = 'grab';
+  }, { signal });
+
+  // mousemove: drag node, pan, or hover
+  State.mapCanvas.addEventListener('mousemove', e => {
+    const rect = State.mapCanvas.getBoundingClientRect();
+
+    // Dragging a node
+    if (State._mapDragNode) {
+      const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+      const node = State.mapNodePos[State._mapDragNode];
+      if (node) { node.x = world.x; node.y = world.y; }
+      drawMap();
+      return;
+    }
+
+    // Panning
+    if (State.mapIsPanning) {
+      State.mapOffX = e.clientX - State.mapPanStart.x;
+      State.mapOffY = e.clientY - State.mapPanStart.y;
+      drawMap();
+      return;
+    }
+
+    // Hover detection
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    let found = null;
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      if (Math.hypot(world.x - pos.x, world.y - pos.y) < CONSTANTS.MAP_HOVER_THRESHOLD) { found = key; break; }
+    }
+    State.mapHoverNode = found;
+    drawMap();
+
+    const tooltip = document.getElementById('tooltip');
+    if (found) {
+      const h = State.mapNodePos[found].host;
+      if (!h) { tooltip.style.display = 'none'; return; }
+      const tag = h.tags[0]; const cfg = tag ? (TAG_CONFIG[tag] || null) : null;
+      const openPorts = h.ports.filter(p => p.state === 'open');
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 14) + 'px'; tooltip.style.top = (e.clientY - 10) + 'px';
+      tooltip.innerHTML =
+        '<div class="tooltip-ip">' + escHtml(h.ip) + '</div>' +
+        '<div class="tooltip-row">Host: <span>' + escHtml(h.hostname) + '</span></div>' +
+        '<div class="tooltip-row">Status: <span style="color:' + (openPorts.length ? '#00ff9d' : '#2d6491') + '">' + (openPorts.length ? 'OPEN' : 'FILTERED') + '</span></div>' +
+        '<div class="tooltip-row">Risk: <span style="color:' + (h.riskLevel === 'critical' ? '#ff3355' : h.riskLevel === 'high' ? '#ff9900' : '#6fa3c8') + '">' + h.riskLevel.toUpperCase() + '</span></div>' +
+        (openPorts.length ? '<div class="tooltip-row">Ports: <span>' + escHtml(openPorts.map(p => p.port).join(', ')) + '</span></div>' : '') +
+        (h.ssl_cn ? '<div class="tooltip-row">CN: <span>' + escHtml(h.ssl_cn) + '</span></div>' : '') +
+        (cfg ? '<div class="tooltip-row">Service: <span style="color:' + cfg.color + '">' + cfg.icon + ' ' + escHtml(cfg.label) + '</span></div>' : '') +
+        (h.latency ? '<div class="tooltip-row">Latency: <span>' + parseFloat(h.latency).toFixed(2) + 'ms</span></div>' : '') +
+        (h.os ? '<div class="tooltip-row">OS: <span>' + escHtml(h.os.slice(0, 40)) + '</span></div>' : '');
+    } else {
+      // Check cluster nodes for hover
+      let foundCluster = null;
+      for (const [key, pos] of Object.entries(State.mapNodePos)) {
+        if (!pos.isCluster) continue;
+        if (Math.hypot(world.x - pos.x, world.y - pos.y) < 22) { foundCluster = key; break; }
+      }
+      if (foundCluster) {
+        const cn = State.mapNodePos[foundCluster];
+        const sKey = cn.subnet;
+        const hostCount = subnets[sKey] ? subnets[sKey].length : 0;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (e.clientX + 14) + 'px'; tooltip.style.top = (e.clientY - 10) + 'px';
+        tooltip.innerHTML =
+          '<div class="tooltip-ip" style="color:#6fa3c8">' + escHtml(sKey) + '</div>' +
+          '<div class="tooltip-row">Hosts: <span>' + hostCount + '</span></div>';
+      } else {
+        tooltip.style.display = 'none';
+      }
+    }
+  }, { signal });
+
+  State.mapCanvas.addEventListener('mouseleave', () => {
+    document.getElementById('tooltip').style.display = 'none';
+    State.mapHoverNode = null; drawMap();
+  }, { signal });
+
+  // Click: inspector on node, zoom-to-subnet on cluster
+  State.mapCanvas.addEventListener('click', e => {
+    if (State.mapIsPanning) return;
+    const rect = State.mapCanvas.getBoundingClientRect();
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+    // Check host nodes
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      if (Math.hypot(world.x - pos.x, world.y - pos.y) < CONSTANTS.MAP_HOVER_THRESHOLD) {
+        showMapInspector(pos.host.ip);
+        return;
+      }
+    }
+
+    // Check cluster nodes -> zoom to subnet
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (!pos.isCluster) continue;
+      if (Math.hypot(world.x - pos.x, world.y - pos.y) < 22) {
+        const subnetHosts = Object.values(State.mapNodePos).filter(n => !n.isCluster && n.subnet === pos.subnet);
+        if (!subnetHosts.length) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of subnetHosts) { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); }
+        State.mapScale = Math.min(State.mapW / (maxX - minX + 120), State.mapH / (maxY - minY + 120), CONSTANTS.MAP_MAX_SCALE);
+        State.mapOffX = -minX * State.mapScale + 60 * State.mapScale;
+        State.mapOffY = -minY * State.mapScale + 60 * State.mapScale;
+        drawMap();
+        return;
+      }
+    }
+  }, { signal });
+
+  // Double-click: jump to host card
+  State.mapCanvas.addEventListener('dblclick', e => {
+    const rect = State.mapCanvas.getBoundingClientRect();
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      if (Math.hypot(world.x - pos.x, world.y - pos.y) < CONSTANTS.MAP_HOVER_THRESHOLD) {
+        jumpToHost(pos.host.ip);
+        return;
+      }
+    }
+  }, { signal });
+
+  // Context menu: annotate
+  State.mapCanvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const rect = State.mapCanvas.getBoundingClientRect();
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    for (const [key, pos] of Object.entries(State.mapNodePos)) {
+      if (pos.isCluster) continue;
+      if (Math.hypot(world.x - pos.x, world.y - pos.y) < CONSTANTS.MAP_HOVER_THRESHOLD) {
+        openAnnModal(pos.host.ip, e);
+        return;
+      }
+    }
+  }, { signal });
+
+  // Scroll to zoom
+  State.mapCanvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = State.mapCanvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? (1 / CONSTANTS.MAP_ZOOM_FACTOR) : CONSTANTS.MAP_ZOOM_FACTOR;
+    const newScale = Math.min(CONSTANTS.MAP_MAX_SCALE, Math.max(CONSTANTS.MAP_MIN_SCALE, State.mapScale * delta));
+    State.mapOffX = mx - (mx - State.mapOffX) * (newScale / State.mapScale);
+    State.mapOffY = my - (my - State.mapOffY) * (newScale / State.mapScale);
+    State.mapScale = newScale;
+    drawMap();
+  }, { passive: false, signal });
+
+  // Zoom buttons
+  document.getElementById('mapZoomIn').onclick = () => {
+    State.mapScale = Math.min(CONSTANTS.MAP_MAX_SCALE, State.mapScale * CONSTANTS.MAP_ZOOM_FACTOR);
+    State.mapOffX = State.mapW / 2 - (State.mapW / 2 - State.mapOffX) * CONSTANTS.MAP_ZOOM_FACTOR;
+    State.mapOffY = State.mapH / 2 - (State.mapH / 2 - State.mapOffY) * CONSTANTS.MAP_ZOOM_FACTOR;
+    drawMap();
+  };
+  document.getElementById('mapZoomOut').onclick = () => {
+    State.mapScale = Math.max(CONSTANTS.MAP_MIN_SCALE, State.mapScale / CONSTANTS.MAP_ZOOM_FACTOR);
+    State.mapOffX = State.mapW / 2 - (State.mapW / 2 - State.mapOffX) / CONSTANTS.MAP_ZOOM_FACTOR;
+    State.mapOffY = State.mapH / 2 - (State.mapH / 2 - State.mapOffY) / CONSTANTS.MAP_ZOOM_FACTOR;
+    drawMap();
+  };
+  document.getElementById('mapReset').onclick = () => {
+    State.mapScale = 1; State.mapOffX = 0; State.mapOffY = 0; drawMap();
+  };
+  document.getElementById('mapFit').onclick = () => {
+    zoomToFit();
+  };
+
+  // Legend
+  const legend = document.getElementById('mapLegend');
+  legend.innerHTML = '';
+  Object.entries(TAG_CONFIG).forEach(([tag, cfg]) => {
+    if (!State.serviceMap[tag]) return;
+    legend.innerHTML += '<div class="legend-item"><div class="legend-dot" style="background:' + cfg.color + '"></div>' + cfg.icon + ' ' + escHtml(cfg.label) + ' (' + State.serviceMap[tag] + ')</div>';
+  });
+  legend.innerHTML += '<div class="legend-item"><div class="legend-dot" style="background:#1a3a5c;border:1px solid #2d6491"></div> Filtered (' + State.hosts.filter(h => !h.ports.some(p => p.state === 'open')).length + ')</div>';
+  legend.innerHTML += '<div class="legend-item"><div class="legend-dot" style="background:#ff3355"></div> Critical</div>';
+  legend.innerHTML += '<div class="legend-item"><div class="legend-dot" style="background:#ff9900"></div> High</div>';
+
+  // ResizeObserver for canvas resize
+  State._mapResizeObserver = new ResizeObserver(() => {
+    State.mapW = container.clientWidth || 800;
+    State.mapH = Math.max(container.clientHeight, 480);
+    State.mapCanvas.width = State.mapW;
+    State.mapCanvas.height = State.mapH;
+    drawMap();
+  });
+  State._mapResizeObserver.observe(container);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 21: TABS & NAVIGATION
+// ═══════════════════════════════════════════════════════════
+
+const _tabInitialized = {};
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const content = document.getElementById('tab-' + name);
+  if (content) content.classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.dataset.tab === name) t.classList.add('active');
+  });
+  const sb = document.getElementById('searchBar');
+  if (sb) sb.style.display = name === 'hosts' ? 'flex' : 'none';
+
+  if (!_tabInitialized[name] || name === 'ports' || name === 'timeline') {
+    _tabInitialized[name] = true;
+    if (name === 'network' && !State.mapInitialized) setTimeout(initNetworkMap, 80);
+    if (name === 'ports') buildPortsView();
+    if (name === 'heatmap') buildHeatmap();
+    if (name === 'timeline') buildTimeline();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 12: PORT-CENTRIC VIEW
+// ═══════════════════════════════════════════════════════════
+
+function buildPortsView() {
+  const portData = getOpenPorts();
+  const sidebar = document.getElementById('portsList');
+  sidebar.innerHTML = '<input class="ports-search" placeholder="Filter ports..." oninput="filterPortsList(this.value)">' +
+    '<div class="ports-filter-bar">' +
+    '<button class="ports-filter-btn active" onclick="filterPortsProto(\'all\', this)">All</button>' +
+    '<button class="ports-filter-btn" onclick="filterPortsProto(\'tcp\', this)">TCP</button>' +
+    '<button class="ports-filter-btn" onclick="filterPortsProto(\'udp\', this)">UDP</button></div>' +
+    '<div id="portsListInner">' + portData.map(p => {
+      const svc = PORT_SERVICE_MAP[p.port];
+      const icon = svc ? svc.icon : '\u25CF';
+      return '<div class="port-entry" data-port="' + p.port + '" data-proto="' + p.proto + '" data-service="' + (p.service||'') + '" onclick="showPortDetail(' + p.port + ',\'' + p.proto + '\')">' +
+        '<div><span class="port-entry-num">' + icon + ' ' + p.port + '/' + p.proto + '</span> <span class="port-entry-svc">' + escHtml(p.service) + '</span></div>' +
+        '<span class="port-entry-count">' + p.hosts.length + '</span></div>';
+    }).join('') + '</div>';
+  if (portData.length) showPortDetail(portData[0].port, portData[0].proto);
+}
+
+function showPortDetail(port, proto) {
+  document.querySelectorAll('.port-entry').forEach(el => el.classList.remove('active'));
+  const activeEntry = document.querySelector('.port-entry[data-port="' + port + '"][data-proto="' + proto + '"]');
+  if (activeEntry) activeEntry.classList.add('active');
+
+  const hosts = State.hosts.filter(h => h.ports.some(p => p.port === port && p.proto === proto && p.state === 'open'));
+  const svc = PORT_SERVICE_MAP[port];
+  const icon = svc ? svc.icon : '\u25CF';
+  const label = svc ? svc.label : 'Unknown';
+
+  const versions = {};
+  hosts.forEach(h => {
+    const p = h.ports.find(p => p.port === port && p.proto === proto);
+    const ver = p?.version || 'Unknown';
+    versions[ver] = (versions[ver] || 0) + 1;
+  });
+  const topVersion = Object.entries(versions).sort((a, b) => b[1] - a[1])[0];
+
+  const riskCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+  hosts.forEach(h => riskCounts[h.riskLevel]++);
+
+  const detail = document.getElementById('portDetail');
+  detail.innerHTML = '<div class="port-detail-header"><h2>' + icon + ' Port ' + port + '/' + proto + '</h2>' +
+    '<span style="color:var(--text2)">' + escHtml(label) + '</span></div>' +
+    '<div class="port-detail-stats">' +
+    '<span>Hosts: <strong>' + hosts.length + '</strong></span>' +
+    '<span>Top version: <strong>' + (topVersion ? escHtml(topVersion[0]) : 'N/A') + '</strong></span>' +
+    '<span>Critical: <strong style="color:var(--danger)">' + riskCounts.critical + '</strong></span>' +
+    '<span>High: <strong style="color:var(--warn)">' + riskCounts.high + '</strong></span></div>' +
+    '<div class="port-host-list">' + hosts.sort((a, b) => ipToNum(a.ip) - ipToNum(b.ip)).map(h => {
+      const p = h.ports.find(p => p.port === port && p.proto === proto);
+      return '<div class="port-host-row" onclick="jumpToHost(\'' + h.ip + '\')">' +
+        '<span class="port-host-ip">' + h.ip + '</span>' +
+        '<span>' + escHtml(h.hostname) + '</span>' +
+        '<span class="port-host-ver">' + escHtml(p?.version || '') + '</span>' +
+        '<span class="risk-badge risk-' + h.riskLevel + '">' + h.riskLevel.toUpperCase() + '</span></div>';
+    }).join('') + '</div>';
+}
+
+function filterPortsList(term) {
+  const lower = term.toLowerCase();
+  document.querySelectorAll('.port-entry').forEach(el => {
+    const match = el.dataset.port.includes(lower) || (el.dataset.service || '').toLowerCase().includes(lower);
+    el.style.display = match ? '' : 'none';
+  });
+}
+
+function filterPortsProto(proto, btn) {
+  document.querySelectorAll('.ports-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.port-entry').forEach(el => {
+    el.style.display = (proto === 'all' || el.dataset.proto === proto) ? '' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 14: HEATMAP
+// ═══════════════════════════════════════════════════════════
+
+function buildHeatmap() {
+  const container = document.getElementById('heatmapContainer');
+  const portFreq = {};
+  for (const h of State.hosts) {
+    for (const p of h.ports) {
+      if (p.state !== 'open' && p.state !== 'filtered') continue;
+      portFreq[p.port] = (portFreq[p.port] || 0) + 1;
+    }
+  }
+  const topPorts = Object.entries(portFreq).sort((a, b) => b[1] - a[1]).slice(0, 50).map(([port]) => +port).sort((a, b) => a - b);
+
+  const sortedHosts = [...State.hosts].sort((a, b) => {
+    if (a.subnet !== b.subnet) return a.subnet.localeCompare(b.subnet);
+    return ipToNum(a.ip) - ipToNum(b.ip);
+  });
+
+  let html = '<div class="heatmap-legend">' +
+    '<div class="heatmap-legend-item"><div class="heatmap-legend-swatch open"></div> Open</div>' +
+    '<div class="heatmap-legend-item"><div class="heatmap-legend-swatch filtered"></div> Filtered</div>' +
+    '<div class="heatmap-legend-item"><div class="heatmap-legend-swatch closed"></div> Closed/No data</div>' +
+    '<span style="margin-left:auto;color:var(--text3)">Top ' + topPorts.length + ' ports</span></div>';
+
+  html += '<div class="heatmap-wrapper"><table class="heatmap-table"><thead><tr><th></th>';
+  topPorts.forEach(port => {
+    const svc = PORT_SERVICE_MAP[port];
+    html += '<th title="' + port + (svc ? ' - ' + svc.label : '') + '">' + port + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  let currentSubnet = '';
+  for (const host of sortedHosts) {
+    if (host.subnet !== currentSubnet) {
+      currentSubnet = host.subnet;
+      html += '<tr><td colspan="' + (topPorts.length + 1) + '" style="padding:8px;color:var(--text3);font-size:10px;border-top:1px solid var(--border)">' + escHtml(currentSubnet) + '</td></tr>';
+    }
+    const portMap = {};
+    host.ports.forEach(p => { portMap[p.port] = p.state; });
+    html += '<tr><td class="heatmap-ip" title="' + escHtml(host.hostname || host.ip) + '" onclick="jumpToHost(\'' + host.ip + '\')">' + host.ip + '</td>';
+    topPorts.forEach(port => {
+      const state = portMap[port] || 'closed';
+      html += '<td><div class="heatmap-cell ' + state + '" title="' + host.ip + ':' + port + ' (' + state + ')" onclick="jumpToHost(\'' + host.ip + '\')"></div></td>';
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function jumpToHost(ip) {
+  switchTab('hosts', document.querySelector('[data-tab="hosts"]'));
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  const allBtn = document.getElementById('fb-all');
+  if (allBtn) allBtn.classList.add('active');
+  State.activeFilter = 'all';
+  const input = document.getElementById('searchInput');
+  if (input) { input.value = ip; State.searchTerm = ip; }
+  applyFilters();
+  setTimeout(() => {
+    const card = document.querySelector(`.host-card[data-ip="${CSS.escape(ip)}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 120);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 22: EXPORT FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+
+function toggleExport(e) {
+  e.stopPropagation();
+  const d = document.getElementById('exportDropdown');
+  d.style.display = d.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', () => {
+  const d = document.getElementById('exportDropdown');
+  if (d) d.style.display = 'none';
+});
+
+function dlFile(name, content, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = name; a.click();
+}
+
+function exportJSON() {
+  const out = State.hosts.map(h => ({
+    ip: h.ip, hostname: h.hostname, subnet: h.subnet, status: h.status,
+    risk: h.riskLevel, latency: h.latency, os: h.os, mac: h.mac, vendor: h.vendor,
+    ssl_cn: h.ssl_cn, ssl_exp: h.ssl_exp, tags: h.tags,
+    group: h.group || null,
+    sources: h.sources || [],
+    ports: h.ports.filter(p=>p.state==='open').map(p=>({port:p.port,proto:p.proto,service:p.service,version:p.version,source:p.source||null})),
+    annotation: State.annotations[h.ip] || null,
+    history: State.annotations[h.ip]?.history || null,
+  }));
+  dlFile('vantage_export.json', JSON.stringify({ meta: { scans: State.scans }, groups: State.groups, hosts: out }, null, 2), 'application/json');
+}
+
+function exportCSV() {
+  const rows = ['IP,Hostname,Subnet,Status,Risk,Group,Source,Port,Protocol,Service,Version,SSL_CN,SSL_Exp,OS,Annotation_Label,Annotation_Notes'];
+  State.hosts.forEach(h => {
+    const ann = State.annotations[h.ip];
+    const src = (h.sources || []).map(s => s.filename).join(', ');
+    const grp = h.group || '';
+    const openPorts = h.ports.filter(p=>p.state==='open');
+    if (!openPorts.length) {
+      rows.push([h.ip,h.hostname,h.subnet,h.status,h.riskLevel,grp,src,'','','','',h.ssl_cn||'',h.ssl_exp||'',h.os||'',ann?.label||'',ann?.notes||''].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(','));
+    } else {
+      openPorts.forEach(p => {
+        rows.push([h.ip,h.hostname,h.subnet,h.status,h.riskLevel,grp,src,p.port,p.proto,p.service,p.version,h.ssl_cn||'',h.ssl_exp||'',h.os||'',ann?.label||'',ann?.notes||''].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(','));
+      });
+    }
+  });
+  dlFile('Vantage_export.csv', rows.join('\n'), 'text/csv');
+}
+
+function exportMarkdown() {
+  const critical = State.hosts.filter(h=>h.riskLevel==='critical');
+  const high = State.hosts.filter(h=>h.riskLevel==='high');
+  const medium = State.hosts.filter(h=>h.riskLevel==='medium');
+
+  let md = `# Vantage Pentest Summary\n\n`;
+  md += `**Scan File:** ${getCurrentScan().filename || 'N/A'}\n`;
+  md += `**Date:** ${getCurrentScan().startstr || 'N/A'}\n`;
+  md += `**Command:** \`${getCurrentScan().args || 'N/A'}\`\n\n`;
+
+  if (State.scans.length > 1) {
+    md += `## Scans Loaded\n\n| # | Filename | Date | Command |\n|---|----------|------|---------|\n`;
+    State.scans.forEach((s, i) => {
+      md += `| ${i + 1} | ${s.filename || 'N/A'} | ${s.startstr || 'N/A'} | \`${s.args || 'N/A'}\` |\n`;
+    });
+    md += '\n';
+  }
+
+  md += `## Statistics\n\n`;
+  md += `| Metric | Value |\n|--------|-------|\n`;
+  md += `| Total Hosts | ${State.hosts.length} |\n`;
+  md += `| Hosts w/ Open Ports | ${State.hosts.filter(h=>h.ports.some(p=>p.state==='open')).length} |\n`;
+  md += `| Critical Risk | ${critical.length} |\n`;
+  md += `| High Risk | ${high.length} |\n`;
+  md += `| Medium Risk | ${medium.length} |\n`;
+  md += `| Subnets | ${new Set(State.hosts.map(h=>h.subnet)).size} |\n\n`;
+
+  if (critical.length) {
+    md += `## 🔴 Critical Risk Hosts\n\n`;
+    critical.forEach(h => {
+      md += `### ${h.ip}${h.hostname !== h.ip ? ` (${h.hostname})` : ''}\n`;
+      md += `- **OS:** ${h.os || 'Unknown'}\n`;
+      h.ports.filter(p=>p.state==='open').forEach(p => md += `- **Port ${p.port}/${p.proto}** — ${p.service} ${p.version}\n`);
+      if (h.ssl_cn) md += `- **SSL CN:** ${h.ssl_cn} (exp: ${h.ssl_exp || 'N/A'})\n`;
+      const ann = State.annotations[h.ip];
+      if (ann) md += `- **Annotation [${ann.label || 'note'}]:** ${ann.notes || ''}\n`;
+      md += '\n';
+    });
+  }
+
+  if (high.length) {
+    md += `## 🟠 High Risk Hosts\n\n`;
+    high.forEach(h => {
+      md += `### ${h.ip}${h.hostname !== h.ip ? ` (${h.hostname})` : ''}\n`;
+      h.ports.filter(p=>p.state==='open').forEach(p => md += `- **Port ${p.port}/${p.proto}** — ${p.service} ${p.version}\n`);
+      md += '\n';
+    });
+  }
+
+  md += `## All Hosts\n\n| IP | Hostname | Group | Risk | Open Ports | Tags |\n|-----|---------|-------|------|------------|------|\n`;
+  [...State.hosts].sort((a,b)=>ipToNum(a.ip)-ipToNum(b.ip)).forEach(h => {
+    const ports = h.ports.filter(p=>p.state==='open').map(p=>p.port).join(', ') || 'filtered';
+    md += `| ${h.ip} | ${h.hostname} | ${h.group || ''} | ${h.riskLevel.toUpperCase()} | ${ports} | ${h.tags.join(', ')} |\n`;
+  });
+
+  const annotated = Object.entries(State.annotations);
+  if (annotated.length) {
+    md += `\n## Annotations\n\n`;
+    annotated.forEach(([ip, ann]) => {
+      md += `- **${ip}** [${ann.label || 'note'}]: ${ann.notes || ''}\n`;
+    });
+  }
+
+  dlFile('Vantage_pentest_summary.md', md, 'text/markdown');
+}
+
+function exportHTML() {
+  const critCount = State.hosts.filter(h=>h.riskLevel==='critical').length;
+  const highCount = State.hosts.filter(h=>h.riskLevel==='high').length;
+  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Vantage Report — ${escHtml(getCurrentScan().filename||'')}</title>
+<style>body{font-family:monospace;background:#050a0f;color:#c8e6ff;padding:24px;} h1,h2{color:#00d4ff;} table{border-collapse:collapse;width:100%;margin:16px 0;} th,td{border:1px solid #0e2640;padding:8px 12px;font-size:12px;} th{background:#0d1d2e;} .critical{color:#ff3355;} .high{color:#ff9900;} .medium{color:#ffc800;} .low{color:#6fa3c8;}</style>
+</head><body>
+<h1>🔎 Vantage Pentest Report</h1>
+<p>Scan: <b>${escHtml(getCurrentScan().filename||'')}</b> | Date: ${escHtml(getCurrentScan().startstr||'')} | Duration: ${escHtml(getCurrentScan().elapsed||'N/A')}s</p>
+<p>Critical: <span class="critical">${critCount}</span> | High: <span class="high">${highCount}</span> | Total: ${State.hosts.length}</p>`;
+  if (State.scans.length > 1) {
+    html += `<h2>Scans Loaded</h2><table><tr><th>#</th><th>Filename</th><th>Date</th><th>Command</th></tr>`;
+    State.scans.forEach((s, i) => {
+      html += `<tr><td>${i + 1}</td><td>${escHtml(s.filename||'')}</td><td>${escHtml(s.startstr||'')}</td><td>${escHtml(s.args||'')}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+  html += `<h2>Host Summary</h2>
+<table><tr><th>IP</th><th>Hostname</th><th>Group</th><th>Risk</th><th>Open Ports</th><th>OS</th><th>Tags</th><th>Annotation</th></tr>`;
+  [...State.hosts].sort((a,b)=>ipToNum(a.ip)-ipToNum(b.ip)).forEach(h => {
+    const ports = h.ports.filter(p=>p.state==='open').map(p=>`${p.port}/${p.service}`).join(', ') || 'filtered';
+    const ann = State.annotations[h.ip];
+    html += `<tr><td>${escHtml(h.ip)}</td><td>${escHtml(h.hostname)}</td><td>${escHtml(h.group||'')}</td><td class="${h.riskLevel}">${h.riskLevel.toUpperCase()}</td><td>${escHtml(ports)}</td><td>${escHtml(h.os||'')}</td><td>${escHtml(h.tags.join(', '))}</td><td>${ann ? escHtml(`[${ann.label||''}] ${ann.notes||''}`) : ''}</td></tr>`;
+  });
+  html += `</table></body></html>`;
+  dlFile('Vantage_report.html', html, 'text/html');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SECTION 23: KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════
+
+var _keyChord = '', _keyChordTimer = null, _selectedCardIdx = -1;
+
+function getVisibleCards() {
+  return Array.from(document.querySelectorAll('.host-card:not(.filtered)'));
+}
+
+function selectCard(idx) {
+  var cards = getVisibleCards();
+  // Deselect previous
+  cards.forEach(function(c) { c.classList.remove('selected'); });
+  if (idx < 0) idx = 0;
+  if (idx >= cards.length) idx = cards.length - 1;
+  _selectedCardIdx = idx;
+  if (cards[idx]) {
+    cards[idx].classList.add('selected');
+    cards[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+var _chordTabMap = {
+  h: 'hosts', m: 'network', p: 'ports', s: 'subnets', r: 'risk', t: 'timeline'
+};
+
+var _quickLabelMap = {
+  '1': 'confirmed', '2': 'investigate', '3': 'oos', '4': 'patched', '5': 'compromised'
+};
+
+document.addEventListener('keydown', function(e) {
+  // Don't capture when inside input/textarea/select
+  var tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+    if (e.key === 'Escape') { e.target.blur(); }
+    return;
+  }
+
+  // Escape closes modals/overlays
+  if (e.key === 'Escape') {
+    document.getElementById('annModal').style.display = 'none';
+    document.getElementById('shortcutOverlay').style.display = 'none';
+    var d = document.getElementById('exportDropdown');
+    if (d) d.style.display = 'none';
+    return;
+  }
+
+  // Ctrl/Cmd+F focuses search
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    var sb = document.getElementById('searchInput');
+    if (sb && document.getElementById('dashboardScreen').style.display !== 'none') {
+      e.preventDefault();
+      switchTab('hosts', document.querySelector('[data-tab="hosts"]'));
+      sb.focus();
+    }
+    return;
+  }
+
+  // Only process shortcuts when dashboard is visible
+  if (document.getElementById('dashboardScreen').style.display === 'none') return;
+
+  // ? — toggle shortcut overlay
+  if (e.key === '?') {
+    var overlay = document.getElementById('shortcutOverlay');
+    overlay.style.display = overlay.style.display === 'none' ? 'flex' : 'none';
+    return;
+  }
+
+  // Chord: g + key
+  if (_keyChord === 'g') {
+    _keyChord = '';
+    clearTimeout(_keyChordTimer);
+    var tabName = _chordTabMap[e.key];
+    if (tabName) {
+      e.preventDefault();
+      switchTab(tabName, document.querySelector('[data-tab="' + tabName + '"]'));
+    }
+    return;
+  }
+
+  if (e.key === 'g') {
+    _keyChord = 'g';
+    clearTimeout(_keyChordTimer);
+    _keyChordTimer = setTimeout(function() { _keyChord = ''; }, 500);
+    return;
+  }
+
+  // / — focus search
+  if (e.key === '/') {
+    e.preventDefault();
+    switchTab('hosts', document.querySelector('[data-tab="hosts"]'));
+    var searchEl = document.getElementById('searchInput');
+    if (searchEl) searchEl.focus();
+    return;
+  }
+
+  // j/k — navigate cards
+  if (e.key === 'j') {
+    selectCard(_selectedCardIdx + 1);
+    return;
+  }
+  if (e.key === 'k') {
+    selectCard(_selectedCardIdx - 1);
+    return;
+  }
+
+  // a — annotate selected host
+  if (e.key === 'a') {
+    var cards = getVisibleCards();
+    if (_selectedCardIdx >= 0 && _selectedCardIdx < cards.length) {
+      var ip = cards[_selectedCardIdx].dataset.ip;
+      if (ip) openAnnModal(ip);
+    }
+    return;
+  }
+
+  // 1-5 — quick label selected host
+  if (_quickLabelMap[e.key]) {
+    var cards2 = getVisibleCards();
+    if (_selectedCardIdx >= 0 && _selectedCardIdx < cards2.length) {
+      var ip2 = cards2[_selectedCardIdx].dataset.ip;
+      if (ip2) {
+        var existingAnn = State.annotations[ip2] || {};
+        var history2 = existingAnn.history || [];
+        var label = _quickLabelMap[e.key];
+        history2.push({ label: label, notes: existingAnn.notes || '', timestamp: new Date().toISOString() });
+        State.annotations[ip2] = { label: label, notes: existingAnn.notes || '', history: history2 };
+        refreshAnnotationStrip(ip2);
+        updateAnnotatedCount();
+        saveToLocalStorage();
+      }
+    }
+    return;
+  }
+});
+</script>
+</body>
+</html>
